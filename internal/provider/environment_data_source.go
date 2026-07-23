@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/alejandro/terraform-provider-configdirector/internal/client"
 )
@@ -20,21 +21,36 @@ type EnvironmentDataSource struct {
 	client *client.Client
 }
 
+type EnvironmentDataSourceModel struct {
+	Id        types.String `tfsdk:"id"`
+	ProjectId types.String `tfsdk:"project_id"`
+	Name      types.String `tfsdk:"name"`
+	Slug      types.String `tfsdk:"slug"`
+	Color     types.String `tfsdk:"color"`
+	Live      types.Bool   `tfsdk:"live"`
+}
+
 func (d *EnvironmentDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_environment"
 }
 
 func (d *EnvironmentDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	s := EnvironmentDataSourceSchema(ctx)
-	s.Attributes["id"] = schema.StringAttribute{
-		Required:    true,
-		Description: "ID of the environment to look up.",
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Required:    true,
+				Description: "ID of the environment to look up.",
+			},
+			"project_id": schema.StringAttribute{
+				Required:    true,
+				Description: "ID of the project this environment belongs to.",
+			},
+			"name":  schema.StringAttribute{Computed: true},
+			"slug":  schema.StringAttribute{Computed: true},
+			"color": schema.StringAttribute{Computed: true},
+			"live":  schema.BoolAttribute{Computed: true},
+		},
 	}
-	s.Attributes["project_id"] = schema.StringAttribute{
-		Required:    true,
-		Description: "ID of the project this environment belongs to.",
-	}
-	resp.Schema = s
 }
 
 func (d *EnvironmentDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {

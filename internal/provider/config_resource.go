@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/alejandro/terraform-provider-configdirector/internal/client"
@@ -30,23 +32,24 @@ type ConfigResource struct {
 	client *client.Client
 }
 
-// ConfigResourceModel mirrors the generated ConfigModel with one addition:
-// DefaultValue. The codegen tool can't represent config's defaultValue field
-// (a boolean|string|number union), so it's added by hand as a JSON-encoded
-// string; every schema attribute needs a matching tfsdk-tagged struct field
-// or Plan.Get/State.Set fail at runtime, so this can't just reuse ConfigModel.
+// ConfigResourceModel omits defaultValue/typeOptions/variations/targets: the
+// OpenAPI spec describes them as polymorphic (anyOf/oneOf) unions that don't
+// map onto a static Terraform schema. default_value is added back by hand as
+// a JSON-encoded string, since the API requires it on create; it has no
+// update path, so changes require replacement. The others aren't modeled at
+// all yet (see the targeting-rules resource discussion).
 type ConfigResourceModel struct {
-	Client         types.Bool   `tfsdk:"client"`
-	DeprecatedKeys types.List   `tfsdk:"deprecated_keys"`
-	Description    types.String `tfsdk:"description"`
 	Id             types.String `tfsdk:"id"`
-	Key            types.String `tfsdk:"key"`
-	Lifetime       types.String `tfsdk:"lifetime"`
 	ProjectId      types.String `tfsdk:"project_id"`
+	Key            types.String `tfsdk:"key"`
+	Description    types.String `tfsdk:"description"`
 	Role           types.String `tfsdk:"role"`
-	Server         types.Bool   `tfsdk:"server"`
-	State          types.String `tfsdk:"state"`
+	Lifetime       types.String `tfsdk:"lifetime"`
 	Type           types.String `tfsdk:"type"`
+	State          types.String `tfsdk:"state"`
+	Client         types.Bool   `tfsdk:"client"`
+	Server         types.Bool   `tfsdk:"server"`
+	DeprecatedKeys types.List   `tfsdk:"deprecated_keys"`
 	DefaultValue   types.String `tfsdk:"default_value"`
 }
 
@@ -54,33 +57,83 @@ func (r *ConfigResource) Metadata(ctx context.Context, req resource.MetadataRequ
 	resp.TypeName = req.ProviderTypeName + "_config"
 }
 
-// The OpenAPI-driven codegen cannot model config's defaultValue/typeOptions/
-// variations/targets fields: they're polymorphic (anyOf) unions the codegen
-// tool doesn't support (see generator_config.yml ignores). default_value is
-// added back by hand as a JSON-encoded string, since the API requires it on
-// create; it has no update path, so changes require replacement.
 func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
-	s := ConfigResourceSchema(ctx)
-
-	s.Attributes["project_id"] = schema.StringAttribute{
-		Required:      true,
-		Description:   "ID of the project this config belongs to.",
-		PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"project_id": schema.StringAttribute{
+				Required:      true,
+				Description:   "ID of the project this config belongs to.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"key": schema.StringAttribute{
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.LengthBetween(4, 150),
+				},
+			},
+			"description": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtMost(1000),
+				},
+			},
+			"role": schema.StringAttribute{
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.OneOf("config", "flag", "kill-switch", "experiment"),
+				},
+			},
+			"lifetime": schema.StringAttribute{
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.OneOf("permanent", "temporary"),
+				},
+			},
+			"type": schema.StringAttribute{
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.OneOf("boolean", "string", "integer", "float", "enum", "url", "json", "timespan"),
+				},
+			},
+			"state": schema.StringAttribute{
+				Computed: true,
+			},
+			"client": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(true),
+			},
+			"server": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(true),
+			},
+			"deprecated_keys": schema.ListNestedAttribute{
+				Computed: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"config_id":  schema.StringAttribute{Computed: true},
+						"id":         schema.StringAttribute{Computed: true},
+						"is_primary": schema.BoolAttribute{Computed: true},
+						"key":        schema.StringAttribute{Computed: true},
+					},
+				},
+			},
+			"default_value": schema.StringAttribute{
+				Required: true,
+				Description: "JSON-encoded default value for this config (e.g. \"true\", \"42\", \"\\\"some string\\\"\"). " +
+					"The ConfigDirector API has no endpoint that returns the global default back, so this value is " +
+					"write-only from Terraform's perspective: it is sent on create and never reconciled against server " +
+					"state, and cannot be changed in place (any change forces replacement).",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+		},
 	}
-	s.Attributes["id"] = schema.StringAttribute{
-		Computed:      true,
-		PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
-	}
-	s.Attributes["default_value"] = schema.StringAttribute{
-		Required: true,
-		Description: "JSON-encoded default value for this config (e.g. \"true\", \"42\", \"\\\"some string\\\"\"). " +
-			"The ConfigDirector API has no endpoint that returns the global default back, so this value is " +
-			"write-only from Terraform's perspective: it is sent on create and never reconciled against server " +
-			"state, and cannot be changed in place (any change forces replacement).",
-		PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
-	}
-
-	resp.Schema = s
 }
 
 func (r *ConfigResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -93,27 +146,6 @@ func (r *ConfigResource) Configure(ctx context.Context, req resource.ConfigureRe
 		return
 	}
 	r.client = c
-}
-
-func deprecatedKeysListValue(ctx context.Context, keys []client.DeprecatedKey) (types.List, error) {
-	elemType := DeprecatedKeysValue{}.Type(ctx)
-	elems := make([]attr.Value, len(keys))
-	for i, k := range keys {
-		elems[i] = NewDeprecatedKeysValueMust(
-			DeprecatedKeysValue{}.AttributeTypes(ctx),
-			map[string]attr.Value{
-				"config_id":  stringValue(k.ConfigID),
-				"id":         stringValue(k.ID),
-				"is_primary": boolValue(k.IsPrimary),
-				"key":        stringValue(k.Key),
-			},
-		)
-	}
-	listVal, diags := types.ListValue(elemType, elems)
-	if diags.HasError() {
-		return types.ListNull(elemType), fmt.Errorf("%v", diags)
-	}
-	return listVal, nil
 }
 
 // configToModel populates every field except DefaultValue, which the API
@@ -130,9 +162,9 @@ func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel
 	m.Client = boolValue(c.Client)
 	m.Server = boolValue(c.Server)
 
-	keysList, err := deprecatedKeysListValue(ctx, c.DeprecatedKeys)
-	if err != nil {
-		return err
+	keysList, diags := deprecatedKeysListValue(ctx, c.DeprecatedKeys)
+	if diags.HasError() {
+		return fmt.Errorf("%v", diags)
 	}
 	m.DeprecatedKeys = keysList
 	return nil

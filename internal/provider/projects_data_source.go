@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/alejandro/terraform-provider-configdirector/internal/client"
@@ -21,12 +21,30 @@ type ProjectsDataSource struct {
 	client *client.Client
 }
 
+type ProjectsModel struct {
+	Projects types.Set `tfsdk:"projects"`
+}
+
 func (d *ProjectsDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_projects"
 }
 
 func (d *ProjectsDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	resp.Schema = ProjectsDataSourceSchema(ctx)
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"projects": schema.SetNestedAttribute{
+				Computed: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"id":              schema.StringAttribute{Computed: true},
+						"name":            schema.StringAttribute{Computed: true},
+						"organization_id": schema.StringAttribute{Computed: true},
+						"slug":            schema.StringAttribute{Computed: true},
+					},
+				},
+			},
+		},
+	}
 }
 
 func (d *ProjectsDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -50,20 +68,16 @@ func (d *ProjectsDataSource) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	elemType := ProjectsValue{}.Type(ctx)
-	elems := make([]attr.Value, len(projects))
+	models := make([]projectSummaryModel, len(projects))
 	for i, p := range projects {
-		elems[i] = NewProjectsValueMust(
-			ProjectsValue{}.AttributeTypes(ctx),
-			map[string]attr.Value{
-				"id":              stringValue(p.ID),
-				"name":            stringValue(p.Name),
-				"organization_id": stringValue(p.OrganizationID),
-				"slug":            stringValue(p.Slug),
-			},
-		)
+		models[i] = projectSummaryModel{
+			Id:             stringValue(p.ID),
+			Name:           stringValue(p.Name),
+			OrganizationId: stringValue(p.OrganizationID),
+			Slug:           stringValue(p.Slug),
+		}
 	}
-	setVal, diags := types.SetValue(elemType, elems)
+	setVal, diags := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: projectSummaryAttrTypes}, models)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/alejandro/terraform-provider-configdirector/internal/client"
 )
@@ -28,31 +31,62 @@ type EnvironmentResource struct {
 	client *client.Client
 }
 
+type EnvironmentModel struct {
+	Id        types.String `tfsdk:"id"`
+	Name      types.String `tfsdk:"name"`
+	Slug      types.String `tfsdk:"slug"`
+	Color     types.String `tfsdk:"color"`
+	ProjectId types.String `tfsdk:"project_id"`
+	Live      types.Bool   `tfsdk:"live"`
+}
+
 func (r *EnvironmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_environment"
 }
 
-// project_id is a path parameter the OpenAPI codegen has no way to know is
-// user-supplied rather than server-generated, so it comes out of codegen as
-// computed-only; it's overridden here to Required+RequiresReplace since the
-// API has no way to move an environment between projects.
 func (r *EnvironmentResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
-	s := EnvironmentResourceSchema(ctx)
-
-	s.Attributes["project_id"] = schema.StringAttribute{
-		Required:      true,
-		Description:   "ID of the project this environment belongs to.",
-		PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			// project_id is a path parameter with no way for the API's OpenAPI
+			// spec to convey that it's user-supplied rather than server-generated;
+			// it's Required+RequiresReplace here since the API has no way to move
+			// an environment between projects.
+			"project_id": schema.StringAttribute{
+				Required:      true,
+				Description:   "ID of the project this environment belongs to.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"name": schema.StringAttribute{
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.LengthBetween(1, 200),
+				},
+			},
+			"slug": schema.StringAttribute{
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.LengthBetween(4, 150),
+				},
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+			},
+			"color": schema.StringAttribute{
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.OneOf(
+						"maroon", "red", "purple", "fuchsia", "green", "lime",
+						"olive", "yellow", "navy", "blue", "teal", "aqua",
+					),
+				},
+			},
+			"live": schema.BoolAttribute{
+				Required: true,
+			},
+		},
 	}
-	s.Attributes["id"] = schema.StringAttribute{
-		Computed:      true,
-		PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
-	}
-	slugAttr := s.Attributes["slug"].(schema.StringAttribute)
-	slugAttr.PlanModifiers = append(slugAttr.PlanModifiers, stringplanmodifier.RequiresReplace())
-	s.Attributes["slug"] = slugAttr
-
-	resp.Schema = s
 }
 
 func (r *EnvironmentResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {

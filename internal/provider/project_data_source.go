@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -22,17 +21,43 @@ type ProjectDataSource struct {
 	client *client.Client
 }
 
+type ProjectDataSourceModel struct {
+	Id             types.String `tfsdk:"id"`
+	Name           types.String `tfsdk:"name"`
+	OrganizationId types.String `tfsdk:"organization_id"`
+	Slug           types.String `tfsdk:"slug"`
+	Environments   types.List   `tfsdk:"environments"`
+}
+
 func (d *ProjectDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_project"
 }
 
 func (d *ProjectDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	s := ProjectDataSourceSchema(ctx)
-	s.Attributes["id"] = schema.StringAttribute{
-		Required:    true,
-		Description: "ID of the project to look up.",
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Required:    true,
+				Description: "ID of the project to look up.",
+			},
+			"name":            schema.StringAttribute{Computed: true},
+			"organization_id": schema.StringAttribute{Computed: true},
+			"slug":            schema.StringAttribute{Computed: true},
+			"environments": schema.ListNestedAttribute{
+				Computed: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"color":      schema.StringAttribute{Computed: true},
+						"id":         schema.StringAttribute{Computed: true},
+						"live":       schema.BoolAttribute{Computed: true},
+						"name":       schema.StringAttribute{Computed: true},
+						"project_id": schema.StringAttribute{Computed: true},
+						"slug":       schema.StringAttribute{Computed: true},
+					},
+				},
+			},
+		},
 	}
-	resp.Schema = s
 }
 
 func (d *ProjectDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -65,22 +90,7 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	state.Slug = stringValue(project.Slug)
 	state.OrganizationId = stringValue(project.OrganizationID)
 
-	elemType := EnvironmentsValue{}.Type(ctx)
-	elems := make([]attr.Value, len(project.Environments))
-	for i, e := range project.Environments {
-		elems[i] = NewEnvironmentsValueMust(
-			EnvironmentsValue{}.AttributeTypes(ctx),
-			map[string]attr.Value{
-				"color":      stringValue(e.Color),
-				"id":         stringValue(e.ID),
-				"live":       boolValue(e.Live),
-				"name":       stringValue(e.Name),
-				"project_id": stringValue(e.ProjectID),
-				"slug":       stringValue(e.Slug),
-			},
-		)
-	}
-	envList, diags := types.ListValue(elemType, elems)
+	envList, diags := environmentSummaryListValue(ctx, project.Environments)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

@@ -212,7 +212,7 @@ type DeprecatedKey struct {
 // variations and targets are intentionally not modeled here: they are
 // polymorphic/union-typed fields in the OpenAPI spec that the Terraform
 // schema codegen cannot represent, so the resource treats them as
-// write-only, JSON-encoded strings (see ConfigModel in the provider package).
+// write-only, JSON-encoded strings (see ConfigResourceModel in the provider package).
 type Config struct {
 	ID             string          `json:"id"`
 	ProjectID      string          `json:"projectId"`
@@ -246,12 +246,12 @@ type updateConfigAvailability struct {
 }
 
 type updateConfigRequest struct {
-	Key          string                     `json:"key,omitempty"`
-	Description  *string                    `json:"description,omitempty"`
-	Role         string                     `json:"role,omitempty"`
-	Lifetime     string                     `json:"lifetime,omitempty"`
-	Type         string                     `json:"type,omitempty"`
-	Availability *updateConfigAvailability  `json:"availability,omitempty"`
+	Key          string                    `json:"key,omitempty"`
+	Description  *string                   `json:"description,omitempty"`
+	Role         string                    `json:"role,omitempty"`
+	Lifetime     string                    `json:"lifetime,omitempty"`
+	Type         string                    `json:"type,omitempty"`
+	Availability *updateConfigAvailability `json:"availability,omitempty"`
 }
 
 // UpdateConfigRequest is the caller-facing shape; the API's PATCH endpoint

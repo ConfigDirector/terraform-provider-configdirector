@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -22,21 +21,56 @@ type ConfigDataSource struct {
 	client *client.Client
 }
 
+type ConfigDataSourceModel struct {
+	Id             types.String `tfsdk:"id"`
+	ProjectId      types.String `tfsdk:"project_id"`
+	Key            types.String `tfsdk:"key"`
+	Description    types.String `tfsdk:"description"`
+	Role           types.String `tfsdk:"role"`
+	Lifetime       types.String `tfsdk:"lifetime"`
+	Type           types.String `tfsdk:"type"`
+	State          types.String `tfsdk:"state"`
+	Client         types.Bool   `tfsdk:"client"`
+	Server         types.Bool   `tfsdk:"server"`
+	DeprecatedKeys types.List   `tfsdk:"deprecated_keys"`
+}
+
 func (d *ConfigDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_config"
 }
 
 func (d *ConfigDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	s := ConfigDataSourceSchema(ctx)
-	s.Attributes["key"] = schema.StringAttribute{
-		Required:    true,
-		Description: "Key of the config to look up.",
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"key": schema.StringAttribute{
+				Required:    true,
+				Description: "Key of the config to look up.",
+			},
+			"project_id": schema.StringAttribute{
+				Required:    true,
+				Description: "ID of the project this config belongs to.",
+			},
+			"id":          schema.StringAttribute{Computed: true},
+			"description": schema.StringAttribute{Computed: true},
+			"role":        schema.StringAttribute{Computed: true},
+			"lifetime":    schema.StringAttribute{Computed: true},
+			"type":        schema.StringAttribute{Computed: true},
+			"state":       schema.StringAttribute{Computed: true},
+			"client":      schema.BoolAttribute{Computed: true},
+			"server":      schema.BoolAttribute{Computed: true},
+			"deprecated_keys": schema.ListNestedAttribute{
+				Computed: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"config_id":  schema.StringAttribute{Computed: true},
+						"id":         schema.StringAttribute{Computed: true},
+						"is_primary": schema.BoolAttribute{Computed: true},
+						"key":        schema.StringAttribute{Computed: true},
+					},
+				},
+			},
+		},
 	}
-	s.Attributes["project_id"] = schema.StringAttribute{
-		Required:    true,
-		Description: "ID of the project this config belongs to.",
-	}
-	resp.Schema = s
 }
 
 func (d *ConfigDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -75,25 +109,12 @@ func (d *ConfigDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	state.Client = boolValue(cfg.Client)
 	state.Server = boolValue(cfg.Server)
 
-	elemType := ConfigDsDeprecatedKeysValue{}.Type(ctx)
-	elems := make([]attr.Value, len(cfg.DeprecatedKeys))
-	for i, k := range cfg.DeprecatedKeys {
-		elems[i] = NewConfigDsDeprecatedKeysValueMust(
-			ConfigDsDeprecatedKeysValue{}.AttributeTypes(ctx),
-			map[string]attr.Value{
-				"config_id":  stringValue(k.ConfigID),
-				"id":         stringValue(k.ID),
-				"is_primary": boolValue(k.IsPrimary),
-				"key":        stringValue(k.Key),
-			},
-		)
-	}
-	listVal, diags := types.ListValue(elemType, elems)
+	keysList, diags := deprecatedKeysListValue(ctx, cfg.DeprecatedKeys)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	state.DeprecatedKeys = listVal
+	state.DeprecatedKeys = keysList
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

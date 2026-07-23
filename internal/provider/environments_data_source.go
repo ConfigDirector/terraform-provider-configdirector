@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -22,17 +21,37 @@ type EnvironmentsDataSource struct {
 	client *client.Client
 }
 
+type EnvironmentsModel struct {
+	ProjectId    types.String `tfsdk:"project_id"`
+	Environments types.Set    `tfsdk:"environments"`
+}
+
 func (d *EnvironmentsDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_environments"
 }
 
 func (d *EnvironmentsDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	s := EnvironmentsDataSourceSchema(ctx)
-	s.Attributes["project_id"] = schema.StringAttribute{
-		Required:    true,
-		Description: "ID of the project whose environments should be listed.",
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"project_id": schema.StringAttribute{
+				Required:    true,
+				Description: "ID of the project whose environments should be listed.",
+			},
+			"environments": schema.SetNestedAttribute{
+				Computed: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"color":      schema.StringAttribute{Computed: true},
+						"id":         schema.StringAttribute{Computed: true},
+						"live":       schema.BoolAttribute{Computed: true},
+						"name":       schema.StringAttribute{Computed: true},
+						"project_id": schema.StringAttribute{Computed: true},
+						"slug":       schema.StringAttribute{Computed: true},
+					},
+				},
+			},
+		},
 	}
-	resp.Schema = s
 }
 
 func (d *EnvironmentsDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -60,22 +79,7 @@ func (d *EnvironmentsDataSource) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	elemType := EnvironmentsDsItemValue{}.Type(ctx)
-	elems := make([]attr.Value, len(envs))
-	for i, e := range envs {
-		elems[i] = NewEnvironmentsDsItemValueMust(
-			EnvironmentsDsItemValue{}.AttributeTypes(ctx),
-			map[string]attr.Value{
-				"color":      stringValue(e.Color),
-				"id":         stringValue(e.ID),
-				"live":       boolValue(e.Live),
-				"name":       stringValue(e.Name),
-				"project_id": stringValue(e.ProjectID),
-				"slug":       stringValue(e.Slug),
-			},
-		)
-	}
-	setVal, diags := types.SetValue(elemType, elems)
+	setVal, diags := environmentSummarySetValue(ctx, envs)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

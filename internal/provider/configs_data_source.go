@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -22,17 +21,52 @@ type ConfigsDataSource struct {
 	client *client.Client
 }
 
+type ConfigsModel struct {
+	ProjectId types.String `tfsdk:"project_id"`
+	Configs   types.Set    `tfsdk:"configs"`
+}
+
 func (d *ConfigsDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_configs"
 }
 
 func (d *ConfigsDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
-	s := ConfigsDataSourceSchema(ctx)
-	s.Attributes["project_id"] = schema.StringAttribute{
-		Required:    true,
-		Description: "ID of the project whose configs should be listed.",
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"project_id": schema.StringAttribute{
+				Required:    true,
+				Description: "ID of the project whose configs should be listed.",
+			},
+			"configs": schema.SetNestedAttribute{
+				Computed: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"id":          schema.StringAttribute{Computed: true},
+						"key":         schema.StringAttribute{Computed: true},
+						"description": schema.StringAttribute{Computed: true},
+						"role":        schema.StringAttribute{Computed: true},
+						"lifetime":    schema.StringAttribute{Computed: true},
+						"type":        schema.StringAttribute{Computed: true},
+						"state":       schema.StringAttribute{Computed: true},
+						"client":      schema.BoolAttribute{Computed: true},
+						"server":      schema.BoolAttribute{Computed: true},
+						"project_id":  schema.StringAttribute{Computed: true},
+						"deprecated_keys": schema.ListNestedAttribute{
+							Computed: true,
+							NestedObject: schema.NestedAttributeObject{
+								Attributes: map[string]schema.Attribute{
+									"config_id":  schema.StringAttribute{Computed: true},
+									"id":         schema.StringAttribute{Computed: true},
+									"is_primary": schema.BoolAttribute{Computed: true},
+									"key":        schema.StringAttribute{Computed: true},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
-	resp.Schema = s
 }
 
 func (d *ConfigsDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
@@ -45,27 +79,6 @@ func (d *ConfigsDataSource) Configure(ctx context.Context, req datasource.Config
 		return
 	}
 	d.client = c
-}
-
-func configsDeprecatedKeysListValue(ctx context.Context, keys []client.DeprecatedKey) (types.List, error) {
-	elemType := ConfigsDsDeprecatedKeysValue{}.Type(ctx)
-	elems := make([]attr.Value, len(keys))
-	for i, k := range keys {
-		elems[i] = NewConfigsDsDeprecatedKeysValueMust(
-			ConfigsDsDeprecatedKeysValue{}.AttributeTypes(ctx),
-			map[string]attr.Value{
-				"config_id":  stringValue(k.ConfigID),
-				"id":         stringValue(k.ID),
-				"is_primary": boolValue(k.IsPrimary),
-				"key":        stringValue(k.Key),
-			},
-		)
-	}
-	listVal, diags := types.ListValue(elemType, elems)
-	if diags.HasError() {
-		return types.ListNull(elemType), fmt.Errorf("%v", diags)
-	}
-	return listVal, nil
 }
 
 func (d *ConfigsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -81,32 +94,28 @@ func (d *ConfigsDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		return
 	}
 
-	elemType := ConfigsValue{}.Type(ctx)
-	elems := make([]attr.Value, len(configs))
+	models := make([]configSummaryModel, len(configs))
 	for i, cfg := range configs {
-		keysList, err := configsDeprecatedKeysListValue(ctx, cfg.DeprecatedKeys)
-		if err != nil {
-			resp.Diagnostics.AddError("Error Processing Config Response", err.Error())
+		keysList, diags := deprecatedKeysListValue(ctx, cfg.DeprecatedKeys)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
 			return
 		}
-		elems[i] = NewConfigsValueMust(
-			ConfigsValue{}.AttributeTypes(ctx),
-			map[string]attr.Value{
-				"client":          boolValue(cfg.Client),
-				"deprecated_keys": keysList,
-				"description":     stringPtrValue(cfg.Description),
-				"id":              stringValue(cfg.ID),
-				"key":             stringValue(cfg.Key),
-				"lifetime":        stringValue(cfg.Lifetime),
-				"project_id":      stringValue(cfg.ProjectID),
-				"role":            stringValue(cfg.Role),
-				"server":          boolValue(cfg.Server),
-				"state":           stringValue(cfg.State),
-				"type":            stringValue(cfg.Type),
-			},
-		)
+		models[i] = configSummaryModel{
+			Client:         boolValue(cfg.Client),
+			DeprecatedKeys: keysList,
+			Description:    stringPtrValue(cfg.Description),
+			Id:             stringValue(cfg.ID),
+			Key:            stringValue(cfg.Key),
+			Lifetime:       stringValue(cfg.Lifetime),
+			ProjectId:      stringValue(cfg.ProjectID),
+			Role:           stringValue(cfg.Role),
+			Server:         boolValue(cfg.Server),
+			State:          stringValue(cfg.State),
+			Type:           stringValue(cfg.Type),
+		}
 	}
-	setVal, diags := types.SetValue(elemType, elems)
+	setVal, diags := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: configSummaryAttrTypes}, models)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
