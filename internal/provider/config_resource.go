@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/dynamicplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -35,16 +34,20 @@ type ConfigResource struct {
 
 // ConfigResourceModel omits targets: the OpenAPI spec describes it as a
 // polymorphic (anyOf/oneOf) union that doesn't map onto a static Terraform
-// schema (see the targeting-rules resource discussion). default_value/
+// schema (see the targeting-rules resource discussion). initial_value/
 // type_options/variations are the same kind of polymorphic union, but each
 // is modeled with Terraform's dynamic type (see dynamicFromJSON/
 // jsonFromDynamic in convert.go) so they can be written as plain HCL values
 // (a string, number, bool, or nested structure, whichever fits) instead of
-// requiring a JSON-encoded string. default_value in particular is:
+// requiring a JSON-encoded string. initial_value in particular is:
 //   - Required, since the API requires it on create
 //   - never reconciled against server state: the API never returns it back
 //     (see configToModel), so it's write-only from Terraform's perspective
-//   - RequiresReplace, since the API has no endpoint to change it in place
+//   - pinned to its prior state on every plan after create (see
+//     ignoreUpdatesAfterCreate), since the API has no endpoint to change a
+//     config's default value in place - ongoing default value changes go
+//     through per-environment targeting rules instead, which aren't
+//     modeled by this resource yet (see the targeting-rules discussion)
 type ConfigResourceModel struct {
 	Id             types.String  `tfsdk:"id"`
 	ProjectId      types.String  `tfsdk:"project_id"`
@@ -59,7 +62,7 @@ type ConfigResourceModel struct {
 	Server         types.Bool    `tfsdk:"server"`
 	Variations     types.Dynamic `tfsdk:"variations"`
 	DeprecatedKeys types.List    `tfsdk:"deprecated_keys"`
-	DefaultValue   types.Dynamic `tfsdk:"default_value"`
+	InitialValue   types.Dynamic `tfsdk:"initial_value"`
 }
 
 func (r *ConfigResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -157,13 +160,20 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					},
 				},
 			},
-			"default_value": schema.DynamicAttribute{
+			"initial_value": schema.DynamicAttribute{
 				Required: true,
-				Description: "Default value for this config - a plain string, number, or bool matching \"type\". " +
-					"The ConfigDirector API has no endpoint that returns the global default back, so this value is " +
-					"write-only from Terraform's perspective: it is sent on create and never reconciled against server " +
-					"state, and cannot be changed in place (any change forces replacement).",
-				PlanModifiers: []planmodifier.Dynamic{dynamicplanmodifier.RequiresReplace()},
+				Description: "Default value used when creating this config - a plain string, number, or bool " +
+					"matching \"type\". Despite the name, this isn't reconciled on every apply the way most " +
+					"attributes are: the ConfigDirector API has no endpoint that returns the global default back, " +
+					"so it's write-only from Terraform's perspective, sent only on create. Changing it after the " +
+					"config already exists never replaces the resource and never reaches the API - the stored " +
+					"value is pinned to whatever was set at create time. Note this only stops the *value* from " +
+					"drifting: Terraform will still show a pending update (and this provider will still make a " +
+					"no-op API call) on every plan/apply for as long as the configured value disagrees with the " +
+					"pinned one. Add `lifecycle { ignore_changes = [initial_value] }` on the resource to " +
+					"suppress that too. Ongoing default value changes go through per-environment targeting rules " +
+					"instead, which aren't modeled by this resource yet.",
+				PlanModifiers: []planmodifier.Dynamic{ignoreUpdatesAfterCreate{}},
 			},
 		},
 	}
@@ -204,6 +214,32 @@ func (v variationsRequireExperimentRole) ValidateDynamic(ctx context.Context, re
 	}
 }
 
+// ignoreUpdatesAfterCreate pins an attribute to its prior state on every
+// plan after the resource's first create, regardless of what the config
+// says. Unlike RequiresReplace, a changed value doesn't force replacement -
+// it's simply ignored, which is the desired behavior for
+// initial_value: the API has no way to change it after creation, so
+// there's nothing meaningful to send on Update, and replacing the whole
+// resource over it would be needlessly destructive.
+type ignoreUpdatesAfterCreate struct{}
+
+func (m ignoreUpdatesAfterCreate) Description(ctx context.Context) string {
+	return "Ignores changes to this attribute once the resource has already been created."
+}
+
+func (m ignoreUpdatesAfterCreate) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (m ignoreUpdatesAfterCreate) PlanModifyDynamic(ctx context.Context, req planmodifier.DynamicRequest, resp *planmodifier.DynamicResponse) {
+	// req.State.Raw is null only when there's no prior state yet, i.e. this
+	// is a Create - let the configured value flow through untouched.
+	if req.State.Raw.IsNull() {
+		return
+	}
+	resp.PlanValue = req.StateValue
+}
+
 func (r *ConfigResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
@@ -216,8 +252,8 @@ func (r *ConfigResource) Configure(ctx context.Context, req resource.ConfigureRe
 	r.client = c
 }
 
-// configToModel populates every field except DefaultValue, which the API
-// never returns; callers must set/preserve it separately.
+// configToModel populates every field except InitialValue, which the
+// API never returns; callers must set/preserve it separately.
 func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel) error {
 	m.Id = stringValue(c.ID)
 	m.ProjectId = stringValue(c.ProjectID)
@@ -257,9 +293,9 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	defaultVal, err := jsonFromDynamic(plan.DefaultValue)
+	defaultVal, err := jsonFromDynamic(plan.InitialValue)
 	if err != nil {
-		resp.Diagnostics.AddAttributeError(path.Root("default_value"), "Invalid default_value", err.Error())
+		resp.Diagnostics.AddAttributeError(path.Root("initial_value"), "Invalid initial_value", err.Error())
 		return
 	}
 
@@ -405,7 +441,10 @@ func (r *ConfigResource) ImportState(ctx context.Context, req resource.ImportSta
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), parts[0])...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("key"), parts[1])...)
 	resp.Diagnostics.AddWarning(
-		"default_value Not Imported",
-		"The ConfigDirector API does not return a config's default value, so default_value cannot be populated by import. Set it manually after import or the next plan will show a replacement.",
+		"initial_value Not Imported",
+		"The ConfigDirector API does not return a config's default value, so initial_value cannot be "+
+			"populated by import - it will read as unset. Because changes to it are always ignored once a config "+
+			"exists (see the attribute's description), there's no follow-up apply that can set it after the fact; "+
+			"if you need it populated, recreate the resource (e.g. taint it) instead.",
 	)
 }

@@ -38,9 +38,9 @@ resource "configdirector_config" "example_flag" {
   lifetime   = "temporary"
   type       = "boolean"
 
-  # JSON-encoded: the API's defaultValue field is a union type the
-  # provider can't model natively, so it's passed through as a string.
-  default_value = "false"
+  # Write-only: the API never returns a config's default value, and changing
+  # it after creation is a no-op (it can only be set at create time).
+  initial_value = false
 }
 
 data "configdirector_environments" "all" {

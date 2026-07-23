@@ -25,7 +25,7 @@ resource "configdirector_config" "example_flag" {
   lifetime   = "temporary"
   type       = "boolean"
 
-  default_value = false
+  initial_value = false
 }
 
 resource "configdirector_config" "example_experiment" {
@@ -48,5 +48,5 @@ resource "configdirector_config" "example_experiment" {
     }
   ]
 
-  default_value = "Two"
+  initial_value = "Two"
 }
