@@ -32,25 +32,32 @@ type ConfigResource struct {
 	client *client.Client
 }
 
-// ConfigResourceModel omits defaultValue/typeOptions/variations/targets: the
-// OpenAPI spec describes them as polymorphic (anyOf/oneOf) unions that don't
-// map onto a static Terraform schema. default_value is added back by hand as
-// a JSON-encoded string, since the API requires it on create; it has no
-// update path, so changes require replacement. The others aren't modeled at
-// all yet (see the targeting-rules resource discussion).
+// ConfigResourceModel omits defaultValue/variations/targets: the OpenAPI spec
+// describes them as polymorphic (anyOf/oneOf) unions that don't map onto a
+// static Terraform schema. default_value is added back by hand as a
+// JSON-encoded string, since the API requires it on create; it has no update
+// path, so changes require replacement. type_options is the same kind of
+// polymorphic union, but the API accepts it back on update, so it's modeled
+// as Terraform's dynamic type (see dynamicFromJSON/jsonFromDynamic in
+// convert.go) rather than a string: this lets it be written as a real nested
+// HCL structure - whichever shape matches the config's type - with the
+// backend validating it, instead of the provider trying to model every
+// variant. variations/targets aren't modeled at all yet (see the
+// targeting-rules resource discussion).
 type ConfigResourceModel struct {
-	Id             types.String `tfsdk:"id"`
-	ProjectId      types.String `tfsdk:"project_id"`
-	Key            types.String `tfsdk:"key"`
-	Description    types.String `tfsdk:"description"`
-	Role           types.String `tfsdk:"role"`
-	Lifetime       types.String `tfsdk:"lifetime"`
-	Type           types.String `tfsdk:"type"`
-	State          types.String `tfsdk:"state"`
-	Client         types.Bool   `tfsdk:"client"`
-	Server         types.Bool   `tfsdk:"server"`
-	DeprecatedKeys types.List   `tfsdk:"deprecated_keys"`
-	DefaultValue   types.String `tfsdk:"default_value"`
+	Id             types.String  `tfsdk:"id"`
+	ProjectId      types.String  `tfsdk:"project_id"`
+	Key            types.String  `tfsdk:"key"`
+	Description    types.String  `tfsdk:"description"`
+	Role           types.String  `tfsdk:"role"`
+	Lifetime       types.String  `tfsdk:"lifetime"`
+	Type           types.String  `tfsdk:"type"`
+	TypeOptions    types.Dynamic `tfsdk:"type_options"`
+	State          types.String  `tfsdk:"state"`
+	Client         types.Bool    `tfsdk:"client"`
+	Server         types.Bool    `tfsdk:"server"`
+	DeprecatedKeys types.List    `tfsdk:"deprecated_keys"`
+	DefaultValue   types.String  `tfsdk:"default_value"`
 }
 
 func (r *ConfigResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -99,6 +106,13 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Validators: []validator.String{
 					stringvalidator.OneOf("boolean", "string", "integer", "float", "enum", "url", "json", "timespan"),
 				},
+			},
+			"type_options": schema.DynamicAttribute{
+				Optional: true,
+				Computed: true,
+				Description: "Type-specific options for this config, shaped differently depending on \"type\" " +
+					"(e.g. min/max for integer/float, values for enum, unit for timespan). Not validated by " +
+					"Terraform - the structure you provide is passed through as-is and validated by the API.",
 			},
 			"state": schema.StringAttribute{
 				Computed: true,
@@ -162,6 +176,12 @@ func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel
 	m.Client = boolValue(c.Client)
 	m.Server = boolValue(c.Server)
 
+	typeOptions, err := dynamicFromJSON(c.TypeOptions)
+	if err != nil {
+		return fmt.Errorf("converting typeOptions: %w", err)
+	}
+	m.TypeOptions = typeOptions
+
 	keysList, diags := deprecatedKeysListValue(ctx, c.DeprecatedKeys)
 	if diags.HasError() {
 		return fmt.Errorf("%v", diags)
@@ -183,6 +203,12 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	typeOptions, err := jsonFromDynamic(plan.TypeOptions)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(path.Root("type_options"), "Invalid type_options", err.Error())
+		return
+	}
+
 	server := plan.Server.ValueBool()
 	clientFlag := plan.Client.ValueBool()
 	cfg, err := r.client.CreateConfig(ctx, plan.ProjectId.ValueString(), client.CreateConfigRequest{
@@ -191,6 +217,7 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		Role:         plan.Role.ValueString(),
 		Lifetime:     plan.Lifetime.ValueString(),
 		Type:         plan.Type.ValueString(),
+		TypeOptions:  typeOptions,
 		Server:       &server,
 		Client:       &clientFlag,
 		DefaultValue: defaultVal,
@@ -246,12 +273,19 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	typeOptions, err := jsonFromDynamic(plan.TypeOptions)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(path.Root("type_options"), "Invalid type_options", err.Error())
+		return
+	}
+
 	cfg, err := r.client.UpdateConfig(ctx, plan.ProjectId.ValueString(), state.Key.ValueString(), client.UpdateConfigRequest{
 		Key:         plan.Key.ValueString(),
 		Description: stringPtrFromValue(plan.Description),
 		Role:        plan.Role.ValueString(),
 		Lifetime:    plan.Lifetime.ValueString(),
 		Type:        plan.Type.ValueString(),
+		TypeOptions: typeOptions,
 		Server:      plan.Server.ValueBool(),
 		Client:      plan.Client.ValueBool(),
 	})

@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"math/big"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -169,4 +171,137 @@ var configSummaryAttrTypes = map[string]attr.Type{
 	"server":          types.BoolType,
 	"state":           types.StringType,
 	"type":            types.StringType,
+}
+
+// dynamicFromJSON converts an arbitrary JSON value (as produced by
+// encoding/json's decode-into-`any`: nil, bool, float64, string, []any,
+// map[string]any) into a types.Dynamic. Only the outermost value is wrapped
+// as dynamic; every nested slot gets a concrete type (Bool/Number/String/
+// Tuple/Object) inferred from the value present, matching how Terraform
+// itself builds a dynamic attribute's value out of a literal HCL object or
+// tuple. A field like config's typeOptions has a genuinely different shape
+// per config type (integer bounds vs. enum values vs. timespan units, ...),
+// which is why the attribute is dynamic at all - but wrapping every nested
+// level in its own dynamic type (rather than just the top) produces a value
+// shape Terraform's own planned value never matches, which surfaces as
+// "provider produced inconsistent result" on every apply.
+func dynamicFromJSON(v any) (types.Dynamic, error) {
+	if v == nil {
+		return types.DynamicNull(), nil
+	}
+	val, err := attrValueFromJSON(v)
+	if err != nil {
+		return types.DynamicNull(), err
+	}
+	return types.DynamicValue(val), nil
+}
+
+// attrValueFromJSON returns a concretely-typed attr.Value for any JSON value
+// except nil, which is represented as a dynamic null since there's no way to
+// infer a concrete type for an absent value.
+func attrValueFromJSON(v any) (attr.Value, error) {
+	switch x := v.(type) {
+	case nil:
+		return types.DynamicNull(), nil
+	case bool:
+		return types.BoolValue(x), nil
+	case float64:
+		return types.NumberValue(big.NewFloat(x)), nil
+	case string:
+		return types.StringValue(x), nil
+	case []any:
+		elemValues := make([]attr.Value, len(x))
+		elemTypes := make([]attr.Type, len(x))
+		for i, item := range x {
+			val, err := attrValueFromJSON(item)
+			if err != nil {
+				return nil, err
+			}
+			elemValues[i] = val
+			elemTypes[i] = val.Type(context.Background())
+		}
+		tupleVal, diags := types.TupleValue(elemTypes, elemValues)
+		if diags.HasError() {
+			return nil, fmt.Errorf("%v", diags)
+		}
+		return tupleVal, nil
+	case map[string]any:
+		attrTypes := make(map[string]attr.Type, len(x))
+		attrValues := make(map[string]attr.Value, len(x))
+		for k, item := range x {
+			val, err := attrValueFromJSON(item)
+			if err != nil {
+				return nil, err
+			}
+			attrValues[k] = val
+			attrTypes[k] = val.Type(context.Background())
+		}
+		objVal, diags := types.ObjectValue(attrTypes, attrValues)
+		if diags.HasError() {
+			return nil, fmt.Errorf("%v", diags)
+		}
+		return objVal, nil
+	default:
+		return nil, fmt.Errorf("unsupported JSON value type %T", v)
+	}
+}
+
+// jsonFromDynamic is the inverse of dynamicFromJSON: it converts a
+// types.Dynamic (as built above, or as constructed from HCL by Terraform)
+// back into a plain Go value ready for encoding/json.
+func jsonFromDynamic(d types.Dynamic) (any, error) {
+	if d.IsNull() || d.IsUnknown() {
+		return nil, nil
+	}
+	return jsonFromAttrValue(d.UnderlyingValue())
+}
+
+func jsonFromAttrValue(v attr.Value) (any, error) {
+	switch x := v.(type) {
+	case types.Dynamic:
+		if x.IsNull() || x.IsUnknown() {
+			return nil, nil
+		}
+		return jsonFromAttrValue(x.UnderlyingValue())
+	case types.Bool:
+		if x.IsNull() || x.IsUnknown() {
+			return nil, nil
+		}
+		return x.ValueBool(), nil
+	case types.String:
+		if x.IsNull() || x.IsUnknown() {
+			return nil, nil
+		}
+		return x.ValueString(), nil
+	case types.Number:
+		if x.IsNull() || x.IsUnknown() {
+			return nil, nil
+		}
+		f, _ := x.ValueBigFloat().Float64()
+		return f, nil
+	case types.Tuple:
+		elems := x.Elements()
+		out := make([]any, len(elems))
+		for i, e := range elems {
+			val, err := jsonFromAttrValue(e)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = val
+		}
+		return out, nil
+	case types.Object:
+		attrsMap := x.Attributes()
+		out := make(map[string]any, len(attrsMap))
+		for k, e := range attrsMap {
+			val, err := jsonFromAttrValue(e)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = val
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("unsupported attr.Value type %T", v)
+	}
 }

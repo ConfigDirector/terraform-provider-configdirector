@@ -208,11 +208,15 @@ type DeprecatedKey struct {
 	IsPrimary bool   `json:"isPrimary"`
 }
 
-// Config is the API representation of a config. defaultValue, typeOptions,
-// variations and targets are intentionally not modeled here: they are
-// polymorphic/union-typed fields in the OpenAPI spec that the Terraform
-// schema codegen cannot represent, so the resource treats them as
-// write-only, JSON-encoded strings (see ConfigResourceModel in the provider package).
+// Config is the API representation of a config. defaultValue, variations,
+// and targets are intentionally not modeled here: they are polymorphic/
+// union-typed fields in the OpenAPI spec that don't map onto a static Go
+// struct, so the resource treats them as write-only, JSON-encoded strings
+// (see ConfigResourceModel in the provider package). typeOptions is the same
+// kind of polymorphic union, but it's modeled here as `any` (decoded from/
+// encoded to arbitrary JSON) since the provider represents it with
+// Terraform's dynamic type instead of a string - see dynamicFromJSON /
+// jsonFromDynamic in the provider package.
 type Config struct {
 	ID             string          `json:"id"`
 	ProjectID      string          `json:"projectId"`
@@ -221,6 +225,7 @@ type Config struct {
 	Role           string          `json:"role"`
 	Lifetime       string          `json:"lifetime"`
 	Type           string          `json:"type"`
+	TypeOptions    any             `json:"typeOptions"`
 	State          string          `json:"state"`
 	Client         bool            `json:"client"`
 	Server         bool            `json:"server"`
@@ -235,6 +240,7 @@ type CreateConfigRequest struct {
 	Role         string  `json:"role"`
 	Lifetime     string  `json:"lifetime"`
 	Type         string  `json:"type"`
+	TypeOptions  any     `json:"typeOptions,omitempty"`
 	Server       *bool   `json:"server,omitempty"`
 	Client       *bool   `json:"client,omitempty"`
 	DefaultValue any     `json:"defaultValue"`
@@ -251,6 +257,7 @@ type updateConfigRequest struct {
 	Role         string                    `json:"role,omitempty"`
 	Lifetime     string                    `json:"lifetime,omitempty"`
 	Type         string                    `json:"type,omitempty"`
+	TypeOptions  any                       `json:"typeOptions,omitempty"`
 	Availability *updateConfigAvailability `json:"availability,omitempty"`
 }
 
@@ -263,6 +270,7 @@ type UpdateConfigRequest struct {
 	Role        string
 	Lifetime    string
 	Type        string
+	TypeOptions any
 	Server      bool
 	Client      bool
 }
@@ -285,8 +293,10 @@ func (c *Client) GetConfig(ctx context.Context, projectID, key string) (*Config,
 	return &out, nil
 }
 
+// UpdateConfig PATCHes the config, then GETs it back: the API's PATCH
+// response body is empty on success, so it can't be used to populate the
+// returned Config directly.
 func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req UpdateConfigRequest) (*Config, error) {
-	var out Config
 	path := fmt.Sprintf("/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
 	body := updateConfigRequest{
 		Key:         req.Key,
@@ -294,15 +304,16 @@ func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req Up
 		Role:        req.Role,
 		Lifetime:    req.Lifetime,
 		Type:        req.Type,
+		TypeOptions: req.TypeOptions,
 		Availability: &updateConfigAvailability{
 			Server: req.Server,
 			Client: req.Client,
 		},
 	}
-	if err := c.do(ctx, http.MethodPatch, path, body, &out); err != nil {
+	if err := c.do(ctx, http.MethodPatch, path, body, nil); err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return c.GetConfig(ctx, projectID, req.Key)
 }
 
 func (c *Client) DeleteConfig(ctx context.Context, projectID, key string) error {
