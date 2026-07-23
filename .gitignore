@@ -1,0 +1,9 @@
+.env
+terraform-provider-configdirector
+bin/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+crash.*.log

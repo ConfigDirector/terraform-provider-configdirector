@@ -1,0 +1,104 @@
+provider:
+  name: configdirector
+
+resources:
+  project:
+    create:
+      path: /projects
+      method: POST
+    read:
+      path: /projects/{projectId}
+      method: GET
+    schema:
+      ignores:
+        - environments
+        - projectId
+
+  environment:
+    create:
+      path: /projects/{projectId}/environments
+      method: POST
+    read:
+      path: /projects/{projectId}/environments/{environmentId}
+      method: GET
+    update:
+      path: /projects/{projectId}/environments/{environmentId}
+      method: PUT
+    schema:
+      ignores:
+        - environmentId
+
+  config:
+    create:
+      path: /projects/{projectId}/configs
+      method: POST
+    read:
+      path: /projects/{projectId}/configs/{configKey}
+      method: GET
+    update:
+      path: /projects/{projectId}/configs/{configKey}
+      method: PATCH
+    delete:
+      path: /projects/{projectId}/configs/{configKey}
+      method: DELETE
+    schema:
+      ignores:
+        - configKey
+        - defaultValue
+        - typeOptions
+        - targets
+        - variations
+
+data_sources:
+  project:
+    read:
+      path: /projects/{projectId}
+      method: GET
+    schema:
+      ignores:
+        - projectId
+
+  projects:
+    read:
+      path: /projects
+      method: GET
+
+  environment:
+    read:
+      path: /projects/{projectId}/environments/{environmentId}
+      method: GET
+    schema:
+      ignores:
+        - environmentId
+
+  environments:
+    read:
+      path: /projects/{projectId}/environments
+      method: GET
+
+  config:
+    read:
+      path: /projects/{projectId}/configs/{configKey}
+      method: GET
+    schema:
+      ignores:
+        - configKey
+        - defaultValue
+        - typeOptions
+        - targets
+        - variations
+
+  configs:
+    read:
+      path: /projects/{projectId}/configs
+      method: GET
+    schema:
+      ignores:
+        - defaultValue
+        - typeOptions
+        - targets
+        - variations
+        - configs.defaultValue
+        - configs.typeOptions
+        - configs.targets
+        - configs.variations

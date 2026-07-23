@@ -1,0 +1,8 @@
+# Points Terraform at the locally-built provider binary instead of the
+# registry (this provider isn't published). See examples/README.md.
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/alejandro/configdirector" = "/Users/alejandro/Projects/ConfigDirector/terraform-provider-configdirector/bin"
+  }
+  direct {}
+}
