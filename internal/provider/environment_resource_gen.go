@@ -33,9 +33,6 @@ func EnvironmentResourceSchema(ctx context.Context) schema.Schema {
 					),
 				},
 			},
-			"created_at": schema.StringAttribute{
-				Computed: true,
-			},
 			"id": schema.StringAttribute{
 				Computed: true,
 			},
@@ -57,20 +54,15 @@ func EnvironmentResourceSchema(ctx context.Context) schema.Schema {
 					stringvalidator.LengthBetween(4, 150),
 				},
 			},
-			"updated_at": schema.StringAttribute{
-				Computed: true,
-			},
 		},
 	}
 }
 
 type EnvironmentModel struct {
 	Color     types.String `tfsdk:"color"`
-	CreatedAt types.String `tfsdk:"created_at"`
 	Id        types.String `tfsdk:"id"`
 	Live      types.Bool   `tfsdk:"live"`
 	Name      types.String `tfsdk:"name"`
 	ProjectId types.String `tfsdk:"project_id"`
 	Slug      types.String `tfsdk:"slug"`
-	UpdatedAt types.String `tfsdk:"updated_at"`
 }

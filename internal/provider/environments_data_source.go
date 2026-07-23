@@ -67,13 +67,11 @@ func (d *EnvironmentsDataSource) Read(ctx context.Context, req datasource.ReadRe
 			EnvironmentsDsItemValue{}.AttributeTypes(ctx),
 			map[string]attr.Value{
 				"color":      stringValue(e.Color),
-				"created_at": stringValue(e.CreatedAt),
 				"id":         stringValue(e.ID),
 				"live":       boolValue(e.Live),
 				"name":       stringValue(e.Name),
 				"project_id": stringValue(e.ProjectID),
 				"slug":       stringValue(e.Slug),
-				"updated_at": stringValue(e.UpdatedAt),
 			},
 		)
 	}

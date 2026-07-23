@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/alejandro/terraform-provider-configdirector/internal/client"
 )
@@ -31,8 +33,8 @@ func (r *ProjectResource) Metadata(ctx context.Context, req resource.MetadataReq
 	resp.TypeName = req.ProviderTypeName + "_project"
 }
 
-// The ConfigDirector API has no update or delete endpoint for projects, so
-// name/slug changes must force a replacement rather than an in-place update.
+// The ConfigDirector API has no update endpoint for projects, so name/slug
+// changes must force a replacement rather than an in-place update.
 func (r *ProjectResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	s := ProjectResourceSchema(ctx)
 
@@ -61,13 +63,47 @@ func (r *ProjectResource) Configure(ctx context.Context, req resource.ConfigureR
 	r.client = c
 }
 
-func projectToModel(p *client.Project, m *ProjectModel) {
+// projectEnvironmentsListValue builds the project resource's computed
+// "environments" attribute from the environments the API auto-creates for
+// every new project. Terraform can't register those as independently
+// managed configdirector_environment resources on its own (a provider's
+// Create can't inject new resource instances into another address), so
+// they're surfaced here as read-only data instead.
+func projectEnvironmentsListValue(ctx context.Context, envs []client.Environment) (types.List, error) {
+	elemType := ProjectEnvironmentsValue{}.Type(ctx)
+	elems := make([]attr.Value, len(envs))
+	for i, e := range envs {
+		elems[i] = NewProjectEnvironmentsValueMust(
+			ProjectEnvironmentsValue{}.AttributeTypes(ctx),
+			map[string]attr.Value{
+				"color":      stringValue(e.Color),
+				"id":         stringValue(e.ID),
+				"live":       boolValue(e.Live),
+				"name":       stringValue(e.Name),
+				"project_id": stringValue(e.ProjectID),
+				"slug":       stringValue(e.Slug),
+			},
+		)
+	}
+	listVal, diags := types.ListValue(elemType, elems)
+	if diags.HasError() {
+		return types.ListNull(elemType), fmt.Errorf("%v", diags)
+	}
+	return listVal, nil
+}
+
+func projectToModel(ctx context.Context, p *client.Project, m *ProjectModel) error {
 	m.Id = stringValue(p.ID)
 	m.Name = stringValue(p.Name)
 	m.Slug = stringValue(p.Slug)
 	m.OrganizationId = stringValue(p.OrganizationID)
-	m.CreatedAt = stringValue(p.CreatedAt)
-	m.UpdatedAt = stringValue(p.UpdatedAt)
+
+	envList, err := projectEnvironmentsListValue(ctx, p.Environments)
+	if err != nil {
+		return err
+	}
+	m.Environments = envList
+	return nil
 }
 
 func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -86,7 +122,10 @@ func (r *ProjectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	projectToModel(project, &plan)
+	if err := projectToModel(ctx, project, &plan); err != nil {
+		resp.Diagnostics.AddError("Error Processing Project Response", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
@@ -108,7 +147,10 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	projectToModel(project, &state)
+	if err := projectToModel(ctx, project, &state); err != nil {
+		resp.Diagnostics.AddError("Error Processing Project Response", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -141,6 +183,30 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 }
 
+// ImportState accepts either the project's id or its slug. Read() always
+// looks projects up by id, so a slug identifier is resolved to an id here
+// via the project list (there's no get-by-slug endpoint).
 func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	projects, err := r.client.ListProjects(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError("Error Listing Projects", err.Error())
+		return
+	}
+
+	var projectID string
+	for _, p := range projects {
+		if p.ID == req.ID || p.Slug == req.ID {
+			projectID = p.ID
+			break
+		}
+	}
+	if projectID == "" {
+		resp.Diagnostics.AddError(
+			"Project Not Found",
+			fmt.Sprintf("No project with id or slug %q was found.", req.ID),
+		)
+		return
+	}
+
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), resource.ImportStateRequest{ID: projectID}, resp)
 }

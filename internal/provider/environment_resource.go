@@ -73,8 +73,6 @@ func environmentToModel(e *client.Environment, m *EnvironmentModel) {
 	m.Slug = stringValue(e.Slug)
 	m.Color = stringValue(e.Color)
 	m.ProjectId = stringValue(e.ProjectID)
-	m.CreatedAt = stringValue(e.CreatedAt)
-	m.UpdatedAt = stringValue(e.UpdatedAt)
 	m.Live = boolValue(e.Live)
 }
 
@@ -130,6 +128,7 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 	}
 
 	env, err := r.client.UpdateEnvironment(ctx, plan.ProjectId.ValueString(), plan.Id.ValueString(), client.UpdateEnvironmentRequest{
+		ID:    plan.Id.ValueString(),
 		Name:  plan.Name.ValueString(),
 		Slug:  plan.Slug.ValueString(),
 		Color: plan.Color.ValueString(),
@@ -161,15 +160,42 @@ func (r *EnvironmentResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 }
 
+// ImportState accepts project_id/environment_id or project_id/slug. Slug
+// support exists so environments the API auto-creates for a new project
+// (e.g. "test", "production") can be adopted via an import block without
+// first having to look up their generated UUID.
 func (r *EnvironmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts := strings.SplitN(req.ID, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		resp.Diagnostics.AddError(
 			"Unexpected Import Identifier",
-			fmt.Sprintf("Expected import identifier with format: project_id/environment_id. Got: %q", req.ID),
+			fmt.Sprintf("Expected import identifier with format: project_id/environment_id_or_slug. Got: %q", req.ID),
 		)
 		return
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), parts[0])...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
+	projectID, identifier := parts[0], parts[1]
+
+	envs, err := r.client.ListEnvironments(ctx, projectID)
+	if err != nil {
+		resp.Diagnostics.AddError("Error Listing Environments", err.Error())
+		return
+	}
+
+	var environmentID string
+	for _, e := range envs {
+		if e.ID == identifier || e.Slug == identifier {
+			environmentID = e.ID
+			break
+		}
+	}
+	if environmentID == "" {
+		resp.Diagnostics.AddError(
+			"Environment Not Found",
+			fmt.Sprintf("No environment with id or slug %q was found in project %q.", identifier, projectID),
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), projectID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), environmentID)...)
 }

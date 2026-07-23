@@ -24,9 +24,6 @@ func ConfigsDataSourceSchema(ctx context.Context) schema.Schema {
 						"client": schema.BoolAttribute{
 							Computed: true,
 						},
-						"created_at": schema.StringAttribute{
-							Computed: true,
-						},
 						"deprecated_keys": schema.ListNestedAttribute{
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
@@ -76,9 +73,6 @@ func ConfigsDataSourceSchema(ctx context.Context) schema.Schema {
 							Computed: true,
 						},
 						"type": schema.StringAttribute{
-							Computed: true,
-						},
-						"updated_at": schema.StringAttribute{
 							Computed: true,
 						},
 					},
@@ -143,24 +137,6 @@ func (t ConfigsType) ValueFromObject(ctx context.Context, in basetypes.ObjectVal
 		diags.AddError(
 			"Attribute Wrong Type",
 			fmt.Sprintf(`client expected to be basetypes.BoolValue, was: %T`, clientAttribute))
-	}
-
-	createdAtAttribute, ok := attributes["created_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`created_at is missing from object`)
-
-		return nil, diags
-	}
-
-	createdAtVal, ok := createdAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`created_at expected to be basetypes.StringValue, was: %T`, createdAtAttribute))
 	}
 
 	deprecatedKeysAttribute, ok := attributes["deprecated_keys"]
@@ -343,31 +319,12 @@ func (t ConfigsType) ValueFromObject(ctx context.Context, in basetypes.ObjectVal
 			fmt.Sprintf(`type expected to be basetypes.StringValue, was: %T`, typeAttribute))
 	}
 
-	updatedAtAttribute, ok := attributes["updated_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`updated_at is missing from object`)
-
-		return nil, diags
-	}
-
-	updatedAtVal, ok := updatedAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`updated_at expected to be basetypes.StringValue, was: %T`, updatedAtAttribute))
-	}
-
 	if diags.HasError() {
 		return nil, diags
 	}
 
 	return ConfigsValue{
 		Client:         clientVal,
-		CreatedAt:      createdAtVal,
 		DeprecatedKeys: deprecatedKeysVal,
 		Description:    descriptionVal,
 		Id:             idVal,
@@ -378,7 +335,6 @@ func (t ConfigsType) ValueFromObject(ctx context.Context, in basetypes.ObjectVal
 		Server:         serverVal,
 		State:          stateVal,
 		ConfigsType:    typeVal,
-		UpdatedAt:      updatedAtVal,
 		state:          attr.ValueStateKnown,
 	}, diags
 }
@@ -464,24 +420,6 @@ func NewConfigsValue(attributeTypes map[string]attr.Type, attributes map[string]
 			fmt.Sprintf(`client expected to be basetypes.BoolValue, was: %T`, clientAttribute))
 	}
 
-	createdAtAttribute, ok := attributes["created_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`created_at is missing from object`)
-
-		return NewConfigsValueUnknown(), diags
-	}
-
-	createdAtVal, ok := createdAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`created_at expected to be basetypes.StringValue, was: %T`, createdAtAttribute))
-	}
-
 	deprecatedKeysAttribute, ok := attributes["deprecated_keys"]
 
 	if !ok {
@@ -662,31 +600,12 @@ func NewConfigsValue(attributeTypes map[string]attr.Type, attributes map[string]
 			fmt.Sprintf(`type expected to be basetypes.StringValue, was: %T`, typeAttribute))
 	}
 
-	updatedAtAttribute, ok := attributes["updated_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`updated_at is missing from object`)
-
-		return NewConfigsValueUnknown(), diags
-	}
-
-	updatedAtVal, ok := updatedAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`updated_at expected to be basetypes.StringValue, was: %T`, updatedAtAttribute))
-	}
-
 	if diags.HasError() {
 		return NewConfigsValueUnknown(), diags
 	}
 
 	return ConfigsValue{
 		Client:         clientVal,
-		CreatedAt:      createdAtVal,
 		DeprecatedKeys: deprecatedKeysVal,
 		Description:    descriptionVal,
 		Id:             idVal,
@@ -697,7 +616,6 @@ func NewConfigsValue(attributeTypes map[string]attr.Type, attributes map[string]
 		Server:         serverVal,
 		State:          stateVal,
 		ConfigsType:    typeVal,
-		UpdatedAt:      updatedAtVal,
 		state:          attr.ValueStateKnown,
 	}, diags
 }
@@ -771,7 +689,6 @@ var _ basetypes.ObjectValuable = ConfigsValue{}
 
 type ConfigsValue struct {
 	Client         basetypes.BoolValue   `tfsdk:"client"`
-	CreatedAt      basetypes.StringValue `tfsdk:"created_at"`
 	DeprecatedKeys basetypes.ListValue   `tfsdk:"deprecated_keys"`
 	Description    basetypes.StringValue `tfsdk:"description"`
 	Id             basetypes.StringValue `tfsdk:"id"`
@@ -782,18 +699,16 @@ type ConfigsValue struct {
 	Server         basetypes.BoolValue   `tfsdk:"server"`
 	State          basetypes.StringValue `tfsdk:"state"`
 	ConfigsType    basetypes.StringValue `tfsdk:"type"`
-	UpdatedAt      basetypes.StringValue `tfsdk:"updated_at"`
 	state          attr.ValueState
 }
 
 func (v ConfigsValue) ToTerraformValue(ctx context.Context) (tftypes.Value, error) {
-	attrTypes := make(map[string]tftypes.Type, 13)
+	attrTypes := make(map[string]tftypes.Type, 11)
 
 	var val tftypes.Value
 	var err error
 
 	attrTypes["client"] = basetypes.BoolType{}.TerraformType(ctx)
-	attrTypes["created_at"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["deprecated_keys"] = basetypes.ListType{
 		ElemType: ConfigsDsDeprecatedKeysValue{}.Type(ctx),
 	}.TerraformType(ctx)
@@ -806,13 +721,12 @@ func (v ConfigsValue) ToTerraformValue(ctx context.Context) (tftypes.Value, erro
 	attrTypes["server"] = basetypes.BoolType{}.TerraformType(ctx)
 	attrTypes["state"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["type"] = basetypes.StringType{}.TerraformType(ctx)
-	attrTypes["updated_at"] = basetypes.StringType{}.TerraformType(ctx)
 
 	objectType := tftypes.Object{AttributeTypes: attrTypes}
 
 	switch v.state {
 	case attr.ValueStateKnown:
-		vals := make(map[string]tftypes.Value, 13)
+		vals := make(map[string]tftypes.Value, 11)
 
 		val, err = v.Client.ToTerraformValue(ctx)
 
@@ -821,14 +735,6 @@ func (v ConfigsValue) ToTerraformValue(ctx context.Context) (tftypes.Value, erro
 		}
 
 		vals["client"] = val
-
-		val, err = v.CreatedAt.ToTerraformValue(ctx)
-
-		if err != nil {
-			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
-		}
-
-		vals["created_at"] = val
 
 		val, err = v.DeprecatedKeys.ToTerraformValue(ctx)
 
@@ -910,14 +816,6 @@ func (v ConfigsValue) ToTerraformValue(ctx context.Context) (tftypes.Value, erro
 
 		vals["type"] = val
 
-		val, err = v.UpdatedAt.ToTerraformValue(ctx)
-
-		if err != nil {
-			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
-		}
-
-		vals["updated_at"] = val
-
 		if err := tftypes.ValidateValue(objectType, vals); err != nil {
 			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
 		}
@@ -977,8 +875,7 @@ func (v ConfigsValue) ToObjectValue(ctx context.Context) (basetypes.ObjectValue,
 	}
 
 	attributeTypes := map[string]attr.Type{
-		"client":     basetypes.BoolType{},
-		"created_at": basetypes.StringType{},
+		"client": basetypes.BoolType{},
 		"deprecated_keys": basetypes.ListType{
 			ElemType: ConfigsDsDeprecatedKeysValue{}.Type(ctx),
 		},
@@ -991,7 +888,6 @@ func (v ConfigsValue) ToObjectValue(ctx context.Context) (basetypes.ObjectValue,
 		"server":      basetypes.BoolType{},
 		"state":       basetypes.StringType{},
 		"type":        basetypes.StringType{},
-		"updated_at":  basetypes.StringType{},
 	}
 
 	if v.IsNull() {
@@ -1006,7 +902,6 @@ func (v ConfigsValue) ToObjectValue(ctx context.Context) (basetypes.ObjectValue,
 		attributeTypes,
 		map[string]attr.Value{
 			"client":          v.Client,
-			"created_at":      v.CreatedAt,
 			"deprecated_keys": deprecatedKeys,
 			"description":     v.Description,
 			"id":              v.Id,
@@ -1017,7 +912,6 @@ func (v ConfigsValue) ToObjectValue(ctx context.Context) (basetypes.ObjectValue,
 			"server":          v.Server,
 			"state":           v.State,
 			"type":            v.ConfigsType,
-			"updated_at":      v.UpdatedAt,
 		})
 
 	return objVal, diags
@@ -1039,10 +933,6 @@ func (v ConfigsValue) Equal(o attr.Value) bool {
 	}
 
 	if !v.Client.Equal(other.Client) {
-		return false
-	}
-
-	if !v.CreatedAt.Equal(other.CreatedAt) {
 		return false
 	}
 
@@ -1086,10 +976,6 @@ func (v ConfigsValue) Equal(o attr.Value) bool {
 		return false
 	}
 
-	if !v.UpdatedAt.Equal(other.UpdatedAt) {
-		return false
-	}
-
 	return true
 }
 
@@ -1103,8 +989,7 @@ func (v ConfigsValue) Type(ctx context.Context) attr.Type {
 
 func (v ConfigsValue) AttributeTypes(ctx context.Context) map[string]attr.Type {
 	return map[string]attr.Type{
-		"client":     basetypes.BoolType{},
-		"created_at": basetypes.StringType{},
+		"client": basetypes.BoolType{},
 		"deprecated_keys": basetypes.ListType{
 			ElemType: ConfigsDsDeprecatedKeysValue{}.Type(ctx),
 		},
@@ -1117,7 +1002,6 @@ func (v ConfigsValue) AttributeTypes(ctx context.Context) map[string]attr.Type {
 		"server":      basetypes.BoolType{},
 		"state":       basetypes.StringType{},
 		"type":        basetypes.StringType{},
-		"updated_at":  basetypes.StringType{},
 	}
 }
 

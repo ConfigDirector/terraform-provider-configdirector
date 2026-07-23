@@ -74,8 +74,6 @@ func (d *ConfigDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	state.State = stringValue(cfg.State)
 	state.Client = boolValue(cfg.Client)
 	state.Server = boolValue(cfg.Server)
-	state.CreatedAt = stringValue(cfg.CreatedAt)
-	state.UpdatedAt = stringValue(cfg.UpdatedAt)
 
 	elemType := ConfigDsDeprecatedKeysValue{}.Type(ctx)
 	elems := make([]attr.Value, len(cfg.DeprecatedKeys))

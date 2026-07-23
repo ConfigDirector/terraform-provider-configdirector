@@ -26,3 +26,9 @@ By default the provider talks to `http://localhost:3001/api/v1`. Set
 
 Run `terraform destroy` when you're done to clean up the example project,
 environment, and config.
+
+To import an existing environment:
+
+```sh
+terraform import configdirector_environment.test "$(terraform output -raw project_id)/test"
+```

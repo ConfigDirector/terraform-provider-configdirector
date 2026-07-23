@@ -23,6 +23,14 @@ resource "configdirector_environment" "staging" {
   live       = false
 }
 
+resource "configdirector_environment" "test" {
+  project_id = configdirector_project.example.id
+  name       = "Test"
+  slug       = "test"
+  color      = "yellow"
+  live       = false
+}
+
 resource "configdirector_config" "example_flag" {
   project_id = configdirector_project.example.id
   key        = "example-flag"

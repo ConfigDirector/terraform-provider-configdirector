@@ -17,12 +17,6 @@
 						}
 					},
 					{
-						"name": "created_at",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
 						"name": "deprecated_keys",
 						"list_nested": {
 							"computed_optional_required": "computed",
@@ -103,12 +97,6 @@
 						"string": {
 							"computed_optional_required": "computed"
 						}
-					},
-					{
-						"name": "updated_at",
-						"string": {
-							"computed_optional_required": "computed"
-						}
 					}
 				]
 			}
@@ -132,12 +120,6 @@
 									{
 										"name": "client",
 										"bool": {
-											"computed_optional_required": "computed"
-										}
-									},
-									{
-										"name": "created_at",
-										"string": {
 											"computed_optional_required": "computed"
 										}
 									},
@@ -228,12 +210,6 @@
 										"string": {
 											"computed_optional_required": "computed"
 										}
-									},
-									{
-										"name": "updated_at",
-										"string": {
-											"computed_optional_required": "computed"
-										}
 									}
 								]
 							}
@@ -259,12 +235,6 @@
 						}
 					},
 					{
-						"name": "created_at",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
 						"name": "id",
 						"string": {
 							"computed_optional_required": "computed"
@@ -284,12 +254,6 @@
 					},
 					{
 						"name": "slug",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
-						"name": "updated_at",
 						"string": {
 							"computed_optional_required": "computed"
 						}
@@ -320,12 +284,6 @@
 										}
 									},
 									{
-										"name": "created_at",
-										"string": {
-											"computed_optional_required": "computed"
-										}
-									},
-									{
 										"name": "id",
 										"string": {
 											"computed_optional_required": "computed"
@@ -351,12 +309,6 @@
 									},
 									{
 										"name": "slug",
-										"string": {
-											"computed_optional_required": "computed"
-										}
-									},
-									{
-										"name": "updated_at",
 										"string": {
 											"computed_optional_required": "computed"
 										}
@@ -373,12 +325,6 @@
 			"schema": {
 				"attributes": [
 					{
-						"name": "created_at",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
 						"name": "environments",
 						"list_nested": {
 							"computed_optional_required": "computed",
@@ -386,12 +332,6 @@
 								"attributes": [
 									{
 										"name": "color",
-										"string": {
-											"computed_optional_required": "computed"
-										}
-									},
-									{
-										"name": "created_at",
 										"string": {
 											"computed_optional_required": "computed"
 										}
@@ -422,12 +362,6 @@
 									},
 									{
 										"name": "slug",
-										"string": {
-											"computed_optional_required": "computed"
-										}
-									},
-									{
-										"name": "updated_at",
 										"string": {
 											"computed_optional_required": "computed"
 										}
@@ -459,12 +393,6 @@
 						"string": {
 							"computed_optional_required": "computed"
 						}
-					},
-					{
-						"name": "updated_at",
-						"string": {
-							"computed_optional_required": "computed"
-						}
 					}
 				]
 			}
@@ -479,12 +407,6 @@
 							"computed_optional_required": "computed",
 							"nested_object": {
 								"attributes": [
-									{
-										"name": "created_at",
-										"string": {
-											"computed_optional_required": "computed"
-										}
-									},
 									{
 										"name": "id",
 										"string": {
@@ -505,12 +427,6 @@
 									},
 									{
 										"name": "slug",
-										"string": {
-											"computed_optional_required": "computed"
-										}
-									},
-									{
-										"name": "updated_at",
 										"string": {
 											"computed_optional_required": "computed"
 										}
@@ -640,12 +556,6 @@
 						}
 					},
 					{
-						"name": "created_at",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
 						"name": "deprecated_keys",
 						"list_nested": {
 							"computed_optional_required": "computed",
@@ -693,12 +603,6 @@
 					},
 					{
 						"name": "state",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
-						"name": "updated_at",
 						"string": {
 							"computed_optional_required": "computed"
 						}
@@ -771,12 +675,6 @@
 						}
 					},
 					{
-						"name": "created_at",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
 						"name": "id",
 						"string": {
 							"computed_optional_required": "computed"
@@ -784,12 +682,6 @@
 					},
 					{
 						"name": "project_id",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
-						"name": "updated_at",
 						"string": {
 							"computed_optional_required": "computed"
 						}
@@ -851,9 +743,49 @@
 						}
 					},
 					{
-						"name": "created_at",
-						"string": {
-							"computed_optional_required": "computed"
+						"name": "environments",
+						"list_nested": {
+							"computed_optional_required": "computed",
+							"nested_object": {
+								"attributes": [
+									{
+										"name": "color",
+										"string": {
+											"computed_optional_required": "computed"
+										}
+									},
+									{
+										"name": "id",
+										"string": {
+											"computed_optional_required": "computed"
+										}
+									},
+									{
+										"name": "live",
+										"bool": {
+											"computed_optional_required": "computed"
+										}
+									},
+									{
+										"name": "name",
+										"string": {
+											"computed_optional_required": "computed"
+										}
+									},
+									{
+										"name": "project_id",
+										"string": {
+											"computed_optional_required": "computed"
+										}
+									},
+									{
+										"name": "slug",
+										"string": {
+											"computed_optional_required": "computed"
+										}
+									}
+								]
+							}
 						}
 					},
 					{
@@ -864,12 +796,6 @@
 					},
 					{
 						"name": "organization_id",
-						"string": {
-							"computed_optional_required": "computed"
-						}
-					},
-					{
-						"name": "updated_at",
 						"string": {
 							"computed_optional_required": "computed"
 						}

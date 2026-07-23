@@ -24,9 +24,6 @@ func EnvironmentsDataSourceSchema(ctx context.Context) schema.Schema {
 						"color": schema.StringAttribute{
 							Computed: true,
 						},
-						"created_at": schema.StringAttribute{
-							Computed: true,
-						},
 						"id": schema.StringAttribute{
 							Computed: true,
 						},
@@ -40,9 +37,6 @@ func EnvironmentsDataSourceSchema(ctx context.Context) schema.Schema {
 							Computed: true,
 						},
 						"slug": schema.StringAttribute{
-							Computed: true,
-						},
-						"updated_at": schema.StringAttribute{
 							Computed: true,
 						},
 					},
@@ -107,24 +101,6 @@ func (t EnvironmentsDsItemType) ValueFromObject(ctx context.Context, in basetype
 		diags.AddError(
 			"Attribute Wrong Type",
 			fmt.Sprintf(`color expected to be basetypes.StringValue, was: %T`, colorAttribute))
-	}
-
-	createdAtAttribute, ok := attributes["created_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`created_at is missing from object`)
-
-		return nil, diags
-	}
-
-	createdAtVal, ok := createdAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`created_at expected to be basetypes.StringValue, was: %T`, createdAtAttribute))
 	}
 
 	idAttribute, ok := attributes["id"]
@@ -217,37 +193,17 @@ func (t EnvironmentsDsItemType) ValueFromObject(ctx context.Context, in basetype
 			fmt.Sprintf(`slug expected to be basetypes.StringValue, was: %T`, slugAttribute))
 	}
 
-	updatedAtAttribute, ok := attributes["updated_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`updated_at is missing from object`)
-
-		return nil, diags
-	}
-
-	updatedAtVal, ok := updatedAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`updated_at expected to be basetypes.StringValue, was: %T`, updatedAtAttribute))
-	}
-
 	if diags.HasError() {
 		return nil, diags
 	}
 
 	return EnvironmentsDsItemValue{
 		Color:     colorVal,
-		CreatedAt: createdAtVal,
 		Id:        idVal,
 		Live:      liveVal,
 		Name:      nameVal,
 		ProjectId: projectIdVal,
 		Slug:      slugVal,
-		UpdatedAt: updatedAtVal,
 		state:     attr.ValueStateKnown,
 	}, diags
 }
@@ -333,24 +289,6 @@ func NewEnvironmentsDsItemValue(attributeTypes map[string]attr.Type, attributes 
 			fmt.Sprintf(`color expected to be basetypes.StringValue, was: %T`, colorAttribute))
 	}
 
-	createdAtAttribute, ok := attributes["created_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`created_at is missing from object`)
-
-		return NewEnvironmentsDsItemValueUnknown(), diags
-	}
-
-	createdAtVal, ok := createdAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`created_at expected to be basetypes.StringValue, was: %T`, createdAtAttribute))
-	}
-
 	idAttribute, ok := attributes["id"]
 
 	if !ok {
@@ -441,37 +379,17 @@ func NewEnvironmentsDsItemValue(attributeTypes map[string]attr.Type, attributes 
 			fmt.Sprintf(`slug expected to be basetypes.StringValue, was: %T`, slugAttribute))
 	}
 
-	updatedAtAttribute, ok := attributes["updated_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`updated_at is missing from object`)
-
-		return NewEnvironmentsDsItemValueUnknown(), diags
-	}
-
-	updatedAtVal, ok := updatedAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`updated_at expected to be basetypes.StringValue, was: %T`, updatedAtAttribute))
-	}
-
 	if diags.HasError() {
 		return NewEnvironmentsDsItemValueUnknown(), diags
 	}
 
 	return EnvironmentsDsItemValue{
 		Color:     colorVal,
-		CreatedAt: createdAtVal,
 		Id:        idVal,
 		Live:      liveVal,
 		Name:      nameVal,
 		ProjectId: projectIdVal,
 		Slug:      slugVal,
-		UpdatedAt: updatedAtVal,
 		state:     attr.ValueStateKnown,
 	}, diags
 }
@@ -545,36 +463,32 @@ var _ basetypes.ObjectValuable = EnvironmentsDsItemValue{}
 
 type EnvironmentsDsItemValue struct {
 	Color     basetypes.StringValue `tfsdk:"color"`
-	CreatedAt basetypes.StringValue `tfsdk:"created_at"`
 	Id        basetypes.StringValue `tfsdk:"id"`
 	Live      basetypes.BoolValue   `tfsdk:"live"`
 	Name      basetypes.StringValue `tfsdk:"name"`
 	ProjectId basetypes.StringValue `tfsdk:"project_id"`
 	Slug      basetypes.StringValue `tfsdk:"slug"`
-	UpdatedAt basetypes.StringValue `tfsdk:"updated_at"`
 	state     attr.ValueState
 }
 
 func (v EnvironmentsDsItemValue) ToTerraformValue(ctx context.Context) (tftypes.Value, error) {
-	attrTypes := make(map[string]tftypes.Type, 8)
+	attrTypes := make(map[string]tftypes.Type, 6)
 
 	var val tftypes.Value
 	var err error
 
 	attrTypes["color"] = basetypes.StringType{}.TerraformType(ctx)
-	attrTypes["created_at"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["id"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["live"] = basetypes.BoolType{}.TerraformType(ctx)
 	attrTypes["name"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["project_id"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["slug"] = basetypes.StringType{}.TerraformType(ctx)
-	attrTypes["updated_at"] = basetypes.StringType{}.TerraformType(ctx)
 
 	objectType := tftypes.Object{AttributeTypes: attrTypes}
 
 	switch v.state {
 	case attr.ValueStateKnown:
-		vals := make(map[string]tftypes.Value, 8)
+		vals := make(map[string]tftypes.Value, 6)
 
 		val, err = v.Color.ToTerraformValue(ctx)
 
@@ -583,14 +497,6 @@ func (v EnvironmentsDsItemValue) ToTerraformValue(ctx context.Context) (tftypes.
 		}
 
 		vals["color"] = val
-
-		val, err = v.CreatedAt.ToTerraformValue(ctx)
-
-		if err != nil {
-			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
-		}
-
-		vals["created_at"] = val
 
 		val, err = v.Id.ToTerraformValue(ctx)
 
@@ -632,14 +538,6 @@ func (v EnvironmentsDsItemValue) ToTerraformValue(ctx context.Context) (tftypes.
 
 		vals["slug"] = val
 
-		val, err = v.UpdatedAt.ToTerraformValue(ctx)
-
-		if err != nil {
-			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
-		}
-
-		vals["updated_at"] = val
-
 		if err := tftypes.ValidateValue(objectType, vals); err != nil {
 			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
 		}
@@ -671,13 +569,11 @@ func (v EnvironmentsDsItemValue) ToObjectValue(ctx context.Context) (basetypes.O
 
 	attributeTypes := map[string]attr.Type{
 		"color":      basetypes.StringType{},
-		"created_at": basetypes.StringType{},
 		"id":         basetypes.StringType{},
 		"live":       basetypes.BoolType{},
 		"name":       basetypes.StringType{},
 		"project_id": basetypes.StringType{},
 		"slug":       basetypes.StringType{},
-		"updated_at": basetypes.StringType{},
 	}
 
 	if v.IsNull() {
@@ -692,13 +588,11 @@ func (v EnvironmentsDsItemValue) ToObjectValue(ctx context.Context) (basetypes.O
 		attributeTypes,
 		map[string]attr.Value{
 			"color":      v.Color,
-			"created_at": v.CreatedAt,
 			"id":         v.Id,
 			"live":       v.Live,
 			"name":       v.Name,
 			"project_id": v.ProjectId,
 			"slug":       v.Slug,
-			"updated_at": v.UpdatedAt,
 		})
 
 	return objVal, diags
@@ -723,10 +617,6 @@ func (v EnvironmentsDsItemValue) Equal(o attr.Value) bool {
 		return false
 	}
 
-	if !v.CreatedAt.Equal(other.CreatedAt) {
-		return false
-	}
-
 	if !v.Id.Equal(other.Id) {
 		return false
 	}
@@ -747,10 +637,6 @@ func (v EnvironmentsDsItemValue) Equal(o attr.Value) bool {
 		return false
 	}
 
-	if !v.UpdatedAt.Equal(other.UpdatedAt) {
-		return false
-	}
-
 	return true
 }
 
@@ -765,12 +651,10 @@ func (v EnvironmentsDsItemValue) Type(ctx context.Context) attr.Type {
 func (v EnvironmentsDsItemValue) AttributeTypes(ctx context.Context) map[string]attr.Type {
 	return map[string]attr.Type{
 		"color":      basetypes.StringType{},
-		"created_at": basetypes.StringType{},
 		"id":         basetypes.StringType{},
 		"live":       basetypes.BoolType{},
 		"name":       basetypes.StringType{},
 		"project_id": basetypes.StringType{},
 		"slug":       basetypes.StringType{},
-		"updated_at": basetypes.StringType{},
 	}
 }

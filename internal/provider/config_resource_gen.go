@@ -26,9 +26,6 @@ func ConfigResourceSchema(ctx context.Context) schema.Schema {
 				Computed: true,
 				Default:  booldefault.StaticBool(true),
 			},
-			"created_at": schema.StringAttribute{
-				Computed: true,
-			},
 			"deprecated_keys": schema.ListNestedAttribute{
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -115,16 +112,12 @@ func ConfigResourceSchema(ctx context.Context) schema.Schema {
 					),
 				},
 			},
-			"updated_at": schema.StringAttribute{
-				Computed: true,
-			},
 		},
 	}
 }
 
 type ConfigModel struct {
 	Client         types.Bool   `tfsdk:"client"`
-	CreatedAt      types.String `tfsdk:"created_at"`
 	DeprecatedKeys types.List   `tfsdk:"deprecated_keys"`
 	Description    types.String `tfsdk:"description"`
 	Id             types.String `tfsdk:"id"`
@@ -135,7 +128,6 @@ type ConfigModel struct {
 	Server         types.Bool   `tfsdk:"server"`
 	State          types.String `tfsdk:"state"`
 	Type           types.String `tfsdk:"type"`
-	UpdatedAt      types.String `tfsdk:"updated_at"`
 }
 
 var _ basetypes.ObjectTypable = DeprecatedKeysType{}

@@ -56,12 +56,10 @@ func (d *ProjectsDataSource) Read(ctx context.Context, req datasource.ReadReques
 		elems[i] = NewProjectsValueMust(
 			ProjectsValue{}.AttributeTypes(ctx),
 			map[string]attr.Value{
-				"created_at":      stringValue(p.CreatedAt),
 				"id":              stringValue(p.ID),
 				"name":            stringValue(p.Name),
 				"organization_id": stringValue(p.OrganizationID),
 				"slug":            stringValue(p.Slug),
-				"updated_at":      stringValue(p.UpdatedAt),
 			},
 		)
 	}

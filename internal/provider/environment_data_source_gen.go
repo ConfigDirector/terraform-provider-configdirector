@@ -15,9 +15,6 @@ func EnvironmentDataSourceSchema(ctx context.Context) schema.Schema {
 			"color": schema.StringAttribute{
 				Computed: true,
 			},
-			"created_at": schema.StringAttribute{
-				Computed: true,
-			},
 			"id": schema.StringAttribute{
 				Computed: true,
 			},
@@ -33,20 +30,15 @@ func EnvironmentDataSourceSchema(ctx context.Context) schema.Schema {
 			"slug": schema.StringAttribute{
 				Computed: true,
 			},
-			"updated_at": schema.StringAttribute{
-				Computed: true,
-			},
 		},
 	}
 }
 
 type EnvironmentDataSourceModel struct {
 	Color     types.String `tfsdk:"color"`
-	CreatedAt types.String `tfsdk:"created_at"`
 	Id        types.String `tfsdk:"id"`
 	Live      types.Bool   `tfsdk:"live"`
 	Name      types.String `tfsdk:"name"`
 	ProjectId types.String `tfsdk:"project_id"`
 	Slug      types.String `tfsdk:"slug"`
-	UpdatedAt types.String `tfsdk:"updated_at"`
 }

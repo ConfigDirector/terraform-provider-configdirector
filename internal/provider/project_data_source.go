@@ -64,8 +64,6 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	state.Name = stringValue(project.Name)
 	state.Slug = stringValue(project.Slug)
 	state.OrganizationId = stringValue(project.OrganizationID)
-	state.CreatedAt = stringValue(project.CreatedAt)
-	state.UpdatedAt = stringValue(project.UpdatedAt)
 
 	elemType := EnvironmentsValue{}.Type(ctx)
 	elems := make([]attr.Value, len(project.Environments))
@@ -74,13 +72,11 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 			EnvironmentsValue{}.AttributeTypes(ctx),
 			map[string]attr.Value{
 				"color":      stringValue(e.Color),
-				"created_at": stringValue(e.CreatedAt),
 				"id":         stringValue(e.ID),
 				"live":       boolValue(e.Live),
 				"name":       stringValue(e.Name),
 				"project_id": stringValue(e.ProjectID),
 				"slug":       stringValue(e.Slug),
-				"updated_at": stringValue(e.UpdatedAt),
 			},
 		)
 	}

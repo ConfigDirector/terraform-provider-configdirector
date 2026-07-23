@@ -11,8 +11,11 @@ resources:
       method: GET
     schema:
       ignores:
-        - environments
         - projectId
+        - createdAt
+        - updatedAt
+        - environments.createdAt
+        - environments.updatedAt
 
   environment:
     create:
@@ -27,6 +30,8 @@ resources:
     schema:
       ignores:
         - environmentId
+        - createdAt
+        - updatedAt
 
   config:
     create:
@@ -48,6 +53,8 @@ resources:
         - typeOptions
         - targets
         - variations
+        - createdAt
+        - updatedAt
 
 data_sources:
   project:
@@ -57,11 +64,21 @@ data_sources:
     schema:
       ignores:
         - projectId
+        - createdAt
+        - updatedAt
+        - environments.createdAt
+        - environments.updatedAt
 
   projects:
     read:
       path: /projects
       method: GET
+    schema:
+      ignores:
+        - createdAt
+        - updatedAt
+        - projects.createdAt
+        - projects.updatedAt
 
   environment:
     read:
@@ -70,11 +87,19 @@ data_sources:
     schema:
       ignores:
         - environmentId
+        - createdAt
+        - updatedAt
 
   environments:
     read:
       path: /projects/{projectId}/environments
       method: GET
+    schema:
+      ignores:
+        - createdAt
+        - updatedAt
+        - environments.createdAt
+        - environments.updatedAt
 
   config:
     read:
@@ -87,6 +112,8 @@ data_sources:
         - typeOptions
         - targets
         - variations
+        - createdAt
+        - updatedAt
 
   configs:
     read:
@@ -98,7 +125,11 @@ data_sources:
         - typeOptions
         - targets
         - variations
+        - createdAt
+        - updatedAt
         - configs.defaultValue
         - configs.typeOptions
         - configs.targets
         - configs.variations
+        - configs.createdAt
+        - configs.updatedAt

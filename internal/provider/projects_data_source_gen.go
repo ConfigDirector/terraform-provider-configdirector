@@ -21,9 +21,6 @@ func ProjectsDataSourceSchema(ctx context.Context) schema.Schema {
 			"projects": schema.SetNestedAttribute{
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"created_at": schema.StringAttribute{
-							Computed: true,
-						},
 						"id": schema.StringAttribute{
 							Computed: true,
 						},
@@ -34,9 +31,6 @@ func ProjectsDataSourceSchema(ctx context.Context) schema.Schema {
 							Computed: true,
 						},
 						"slug": schema.StringAttribute{
-							Computed: true,
-						},
-						"updated_at": schema.StringAttribute{
 							Computed: true,
 						},
 					},
@@ -80,24 +74,6 @@ func (t ProjectsType) ValueFromObject(ctx context.Context, in basetypes.ObjectVa
 	var diags diag.Diagnostics
 
 	attributes := in.Attributes()
-
-	createdAtAttribute, ok := attributes["created_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`created_at is missing from object`)
-
-		return nil, diags
-	}
-
-	createdAtVal, ok := createdAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`created_at expected to be basetypes.StringValue, was: %T`, createdAtAttribute))
-	}
 
 	idAttribute, ok := attributes["id"]
 
@@ -171,35 +147,15 @@ func (t ProjectsType) ValueFromObject(ctx context.Context, in basetypes.ObjectVa
 			fmt.Sprintf(`slug expected to be basetypes.StringValue, was: %T`, slugAttribute))
 	}
 
-	updatedAtAttribute, ok := attributes["updated_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`updated_at is missing from object`)
-
-		return nil, diags
-	}
-
-	updatedAtVal, ok := updatedAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`updated_at expected to be basetypes.StringValue, was: %T`, updatedAtAttribute))
-	}
-
 	if diags.HasError() {
 		return nil, diags
 	}
 
 	return ProjectsValue{
-		CreatedAt:      createdAtVal,
 		Id:             idVal,
 		Name:           nameVal,
 		OrganizationId: organizationIdVal,
 		Slug:           slugVal,
-		UpdatedAt:      updatedAtVal,
 		state:          attr.ValueStateKnown,
 	}, diags
 }
@@ -267,24 +223,6 @@ func NewProjectsValue(attributeTypes map[string]attr.Type, attributes map[string
 		return NewProjectsValueUnknown(), diags
 	}
 
-	createdAtAttribute, ok := attributes["created_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`created_at is missing from object`)
-
-		return NewProjectsValueUnknown(), diags
-	}
-
-	createdAtVal, ok := createdAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`created_at expected to be basetypes.StringValue, was: %T`, createdAtAttribute))
-	}
-
 	idAttribute, ok := attributes["id"]
 
 	if !ok {
@@ -357,35 +295,15 @@ func NewProjectsValue(attributeTypes map[string]attr.Type, attributes map[string
 			fmt.Sprintf(`slug expected to be basetypes.StringValue, was: %T`, slugAttribute))
 	}
 
-	updatedAtAttribute, ok := attributes["updated_at"]
-
-	if !ok {
-		diags.AddError(
-			"Attribute Missing",
-			`updated_at is missing from object`)
-
-		return NewProjectsValueUnknown(), diags
-	}
-
-	updatedAtVal, ok := updatedAtAttribute.(basetypes.StringValue)
-
-	if !ok {
-		diags.AddError(
-			"Attribute Wrong Type",
-			fmt.Sprintf(`updated_at expected to be basetypes.StringValue, was: %T`, updatedAtAttribute))
-	}
-
 	if diags.HasError() {
 		return NewProjectsValueUnknown(), diags
 	}
 
 	return ProjectsValue{
-		CreatedAt:      createdAtVal,
 		Id:             idVal,
 		Name:           nameVal,
 		OrganizationId: organizationIdVal,
 		Slug:           slugVal,
-		UpdatedAt:      updatedAtVal,
 		state:          attr.ValueStateKnown,
 	}, diags
 }
@@ -458,41 +376,29 @@ func (t ProjectsType) ValueType(ctx context.Context) attr.Value {
 var _ basetypes.ObjectValuable = ProjectsValue{}
 
 type ProjectsValue struct {
-	CreatedAt      basetypes.StringValue `tfsdk:"created_at"`
 	Id             basetypes.StringValue `tfsdk:"id"`
 	Name           basetypes.StringValue `tfsdk:"name"`
 	OrganizationId basetypes.StringValue `tfsdk:"organization_id"`
 	Slug           basetypes.StringValue `tfsdk:"slug"`
-	UpdatedAt      basetypes.StringValue `tfsdk:"updated_at"`
 	state          attr.ValueState
 }
 
 func (v ProjectsValue) ToTerraformValue(ctx context.Context) (tftypes.Value, error) {
-	attrTypes := make(map[string]tftypes.Type, 6)
+	attrTypes := make(map[string]tftypes.Type, 4)
 
 	var val tftypes.Value
 	var err error
 
-	attrTypes["created_at"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["id"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["name"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["organization_id"] = basetypes.StringType{}.TerraformType(ctx)
 	attrTypes["slug"] = basetypes.StringType{}.TerraformType(ctx)
-	attrTypes["updated_at"] = basetypes.StringType{}.TerraformType(ctx)
 
 	objectType := tftypes.Object{AttributeTypes: attrTypes}
 
 	switch v.state {
 	case attr.ValueStateKnown:
-		vals := make(map[string]tftypes.Value, 6)
-
-		val, err = v.CreatedAt.ToTerraformValue(ctx)
-
-		if err != nil {
-			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
-		}
-
-		vals["created_at"] = val
+		vals := make(map[string]tftypes.Value, 4)
 
 		val, err = v.Id.ToTerraformValue(ctx)
 
@@ -526,14 +432,6 @@ func (v ProjectsValue) ToTerraformValue(ctx context.Context) (tftypes.Value, err
 
 		vals["slug"] = val
 
-		val, err = v.UpdatedAt.ToTerraformValue(ctx)
-
-		if err != nil {
-			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
-		}
-
-		vals["updated_at"] = val
-
 		if err := tftypes.ValidateValue(objectType, vals); err != nil {
 			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
 		}
@@ -564,12 +462,10 @@ func (v ProjectsValue) ToObjectValue(ctx context.Context) (basetypes.ObjectValue
 	var diags diag.Diagnostics
 
 	attributeTypes := map[string]attr.Type{
-		"created_at":      basetypes.StringType{},
 		"id":              basetypes.StringType{},
 		"name":            basetypes.StringType{},
 		"organization_id": basetypes.StringType{},
 		"slug":            basetypes.StringType{},
-		"updated_at":      basetypes.StringType{},
 	}
 
 	if v.IsNull() {
@@ -583,12 +479,10 @@ func (v ProjectsValue) ToObjectValue(ctx context.Context) (basetypes.ObjectValue
 	objVal, diags := types.ObjectValue(
 		attributeTypes,
 		map[string]attr.Value{
-			"created_at":      v.CreatedAt,
 			"id":              v.Id,
 			"name":            v.Name,
 			"organization_id": v.OrganizationId,
 			"slug":            v.Slug,
-			"updated_at":      v.UpdatedAt,
 		})
 
 	return objVal, diags
@@ -609,10 +503,6 @@ func (v ProjectsValue) Equal(o attr.Value) bool {
 		return true
 	}
 
-	if !v.CreatedAt.Equal(other.CreatedAt) {
-		return false
-	}
-
 	if !v.Id.Equal(other.Id) {
 		return false
 	}
@@ -629,10 +519,6 @@ func (v ProjectsValue) Equal(o attr.Value) bool {
 		return false
 	}
 
-	if !v.UpdatedAt.Equal(other.UpdatedAt) {
-		return false
-	}
-
 	return true
 }
 
@@ -646,11 +532,9 @@ func (v ProjectsValue) Type(ctx context.Context) attr.Type {
 
 func (v ProjectsValue) AttributeTypes(ctx context.Context) map[string]attr.Type {
 	return map[string]attr.Type{
-		"created_at":      basetypes.StringType{},
 		"id":              basetypes.StringType{},
 		"name":            basetypes.StringType{},
 		"organization_id": basetypes.StringType{},
 		"slug":            basetypes.StringType{},
-		"updated_at":      basetypes.StringType{},
 	}
 }

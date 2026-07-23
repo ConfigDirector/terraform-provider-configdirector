@@ -4,10 +4,16 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"regexp"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 )
@@ -15,7 +21,34 @@ import (
 func ProjectResourceSchema(ctx context.Context) schema.Schema {
 	return schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"created_at": schema.StringAttribute{
+			"environments": schema.ListNestedAttribute{
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"color": schema.StringAttribute{
+							Computed: true,
+						},
+						"id": schema.StringAttribute{
+							Computed: true,
+						},
+						"live": schema.BoolAttribute{
+							Computed: true,
+						},
+						"name": schema.StringAttribute{
+							Computed: true,
+						},
+						"project_id": schema.StringAttribute{
+							Computed: true,
+						},
+						"slug": schema.StringAttribute{
+							Computed: true,
+						},
+					},
+					CustomType: ProjectEnvironmentsType{
+						ObjectType: types.ObjectType{
+							AttrTypes: ProjectEnvironmentsValue{}.AttributeTypes(ctx),
+						},
+					},
+				},
 				Computed: true,
 			},
 			"id": schema.StringAttribute{
@@ -37,18 +70,613 @@ func ProjectResourceSchema(ctx context.Context) schema.Schema {
 					stringvalidator.RegexMatches(regexp.MustCompile("^[\\da-z]+(?:[-_][\\da-z]+)*$"), ""),
 				},
 			},
-			"updated_at": schema.StringAttribute{
-				Computed: true,
-			},
 		},
 	}
 }
 
 type ProjectModel struct {
-	CreatedAt      types.String `tfsdk:"created_at"`
+	Environments   types.List   `tfsdk:"environments"`
 	Id             types.String `tfsdk:"id"`
 	Name           types.String `tfsdk:"name"`
 	OrganizationId types.String `tfsdk:"organization_id"`
 	Slug           types.String `tfsdk:"slug"`
-	UpdatedAt      types.String `tfsdk:"updated_at"`
+}
+
+var _ basetypes.ObjectTypable = ProjectEnvironmentsType{}
+
+type ProjectEnvironmentsType struct {
+	basetypes.ObjectType
+}
+
+func (t ProjectEnvironmentsType) Equal(o attr.Type) bool {
+	other, ok := o.(ProjectEnvironmentsType)
+
+	if !ok {
+		return false
+	}
+
+	return t.ObjectType.Equal(other.ObjectType)
+}
+
+func (t ProjectEnvironmentsType) String() string {
+	return "ProjectEnvironmentsType"
+}
+
+func (t ProjectEnvironmentsType) ValueFromObject(ctx context.Context, in basetypes.ObjectValue) (basetypes.ObjectValuable, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	attributes := in.Attributes()
+
+	colorAttribute, ok := attributes["color"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`color is missing from object`)
+
+		return nil, diags
+	}
+
+	colorVal, ok := colorAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`color expected to be basetypes.StringValue, was: %T`, colorAttribute))
+	}
+
+	idAttribute, ok := attributes["id"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`id is missing from object`)
+
+		return nil, diags
+	}
+
+	idVal, ok := idAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`id expected to be basetypes.StringValue, was: %T`, idAttribute))
+	}
+
+	liveAttribute, ok := attributes["live"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`live is missing from object`)
+
+		return nil, diags
+	}
+
+	liveVal, ok := liveAttribute.(basetypes.BoolValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`live expected to be basetypes.BoolValue, was: %T`, liveAttribute))
+	}
+
+	nameAttribute, ok := attributes["name"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`name is missing from object`)
+
+		return nil, diags
+	}
+
+	nameVal, ok := nameAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`name expected to be basetypes.StringValue, was: %T`, nameAttribute))
+	}
+
+	projectIdAttribute, ok := attributes["project_id"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`project_id is missing from object`)
+
+		return nil, diags
+	}
+
+	projectIdVal, ok := projectIdAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`project_id expected to be basetypes.StringValue, was: %T`, projectIdAttribute))
+	}
+
+	slugAttribute, ok := attributes["slug"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`slug is missing from object`)
+
+		return nil, diags
+	}
+
+	slugVal, ok := slugAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`slug expected to be basetypes.StringValue, was: %T`, slugAttribute))
+	}
+
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	return ProjectEnvironmentsValue{
+		Color:     colorVal,
+		Id:        idVal,
+		Live:      liveVal,
+		Name:      nameVal,
+		ProjectId: projectIdVal,
+		Slug:      slugVal,
+		state:     attr.ValueStateKnown,
+	}, diags
+}
+
+func NewProjectEnvironmentsValueNull() ProjectEnvironmentsValue {
+	return ProjectEnvironmentsValue{
+		state: attr.ValueStateNull,
+	}
+}
+
+func NewProjectEnvironmentsValueUnknown() ProjectEnvironmentsValue {
+	return ProjectEnvironmentsValue{
+		state: attr.ValueStateUnknown,
+	}
+}
+
+func NewProjectEnvironmentsValue(attributeTypes map[string]attr.Type, attributes map[string]attr.Value) (ProjectEnvironmentsValue, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	// Reference: https://github.com/hashicorp/terraform-plugin-framework/issues/521
+	ctx := context.Background()
+
+	for name, attributeType := range attributeTypes {
+		attribute, ok := attributes[name]
+
+		if !ok {
+			diags.AddError(
+				"Missing ProjectEnvironmentsValue Attribute Value",
+				"While creating a ProjectEnvironmentsValue value, a missing attribute value was detected. "+
+					"A ProjectEnvironmentsValue must contain values for all attributes, even if null or unknown. "+
+					"This is always an issue with the provider and should be reported to the provider developers.\n\n"+
+					fmt.Sprintf("ProjectEnvironmentsValue Attribute Name (%s) Expected Type: %s", name, attributeType.String()),
+			)
+
+			continue
+		}
+
+		if !attributeType.Equal(attribute.Type(ctx)) {
+			diags.AddError(
+				"Invalid ProjectEnvironmentsValue Attribute Type",
+				"While creating a ProjectEnvironmentsValue value, an invalid attribute value was detected. "+
+					"A ProjectEnvironmentsValue must use a matching attribute type for the value. "+
+					"This is always an issue with the provider and should be reported to the provider developers.\n\n"+
+					fmt.Sprintf("ProjectEnvironmentsValue Attribute Name (%s) Expected Type: %s\n", name, attributeType.String())+
+					fmt.Sprintf("ProjectEnvironmentsValue Attribute Name (%s) Given Type: %s", name, attribute.Type(ctx)),
+			)
+		}
+	}
+
+	for name := range attributes {
+		_, ok := attributeTypes[name]
+
+		if !ok {
+			diags.AddError(
+				"Extra ProjectEnvironmentsValue Attribute Value",
+				"While creating a ProjectEnvironmentsValue value, an extra attribute value was detected. "+
+					"A ProjectEnvironmentsValue must not contain values beyond the expected attribute types. "+
+					"This is always an issue with the provider and should be reported to the provider developers.\n\n"+
+					fmt.Sprintf("Extra ProjectEnvironmentsValue Attribute Name: %s", name),
+			)
+		}
+	}
+
+	if diags.HasError() {
+		return NewProjectEnvironmentsValueUnknown(), diags
+	}
+
+	colorAttribute, ok := attributes["color"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`color is missing from object`)
+
+		return NewProjectEnvironmentsValueUnknown(), diags
+	}
+
+	colorVal, ok := colorAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`color expected to be basetypes.StringValue, was: %T`, colorAttribute))
+	}
+
+	idAttribute, ok := attributes["id"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`id is missing from object`)
+
+		return NewProjectEnvironmentsValueUnknown(), diags
+	}
+
+	idVal, ok := idAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`id expected to be basetypes.StringValue, was: %T`, idAttribute))
+	}
+
+	liveAttribute, ok := attributes["live"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`live is missing from object`)
+
+		return NewProjectEnvironmentsValueUnknown(), diags
+	}
+
+	liveVal, ok := liveAttribute.(basetypes.BoolValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`live expected to be basetypes.BoolValue, was: %T`, liveAttribute))
+	}
+
+	nameAttribute, ok := attributes["name"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`name is missing from object`)
+
+		return NewProjectEnvironmentsValueUnknown(), diags
+	}
+
+	nameVal, ok := nameAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`name expected to be basetypes.StringValue, was: %T`, nameAttribute))
+	}
+
+	projectIdAttribute, ok := attributes["project_id"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`project_id is missing from object`)
+
+		return NewProjectEnvironmentsValueUnknown(), diags
+	}
+
+	projectIdVal, ok := projectIdAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`project_id expected to be basetypes.StringValue, was: %T`, projectIdAttribute))
+	}
+
+	slugAttribute, ok := attributes["slug"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`slug is missing from object`)
+
+		return NewProjectEnvironmentsValueUnknown(), diags
+	}
+
+	slugVal, ok := slugAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`slug expected to be basetypes.StringValue, was: %T`, slugAttribute))
+	}
+
+	if diags.HasError() {
+		return NewProjectEnvironmentsValueUnknown(), diags
+	}
+
+	return ProjectEnvironmentsValue{
+		Color:     colorVal,
+		Id:        idVal,
+		Live:      liveVal,
+		Name:      nameVal,
+		ProjectId: projectIdVal,
+		Slug:      slugVal,
+		state:     attr.ValueStateKnown,
+	}, diags
+}
+
+func NewProjectEnvironmentsValueMust(attributeTypes map[string]attr.Type, attributes map[string]attr.Value) ProjectEnvironmentsValue {
+	object, diags := NewProjectEnvironmentsValue(attributeTypes, attributes)
+
+	if diags.HasError() {
+		// This could potentially be added to the diag package.
+		diagsStrings := make([]string, 0, len(diags))
+
+		for _, diagnostic := range diags {
+			diagsStrings = append(diagsStrings, fmt.Sprintf(
+				"%s | %s | %s",
+				diagnostic.Severity(),
+				diagnostic.Summary(),
+				diagnostic.Detail()))
+		}
+
+		panic("NewProjectEnvironmentsValueMust received error(s): " + strings.Join(diagsStrings, "\n"))
+	}
+
+	return object
+}
+
+func (t ProjectEnvironmentsType) ValueFromTerraform(ctx context.Context, in tftypes.Value) (attr.Value, error) {
+	if in.Type() == nil {
+		return NewProjectEnvironmentsValueNull(), nil
+	}
+
+	if !in.Type().Equal(t.TerraformType(ctx)) {
+		return nil, fmt.Errorf("expected %s, got %s", t.TerraformType(ctx), in.Type())
+	}
+
+	if !in.IsKnown() {
+		return NewProjectEnvironmentsValueUnknown(), nil
+	}
+
+	if in.IsNull() {
+		return NewProjectEnvironmentsValueNull(), nil
+	}
+
+	attributes := map[string]attr.Value{}
+
+	val := map[string]tftypes.Value{}
+
+	err := in.As(&val)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for k, v := range val {
+		a, err := t.AttrTypes[k].ValueFromTerraform(ctx, v)
+
+		if err != nil {
+			return nil, err
+		}
+
+		attributes[k] = a
+	}
+
+	return NewProjectEnvironmentsValueMust(ProjectEnvironmentsValue{}.AttributeTypes(ctx), attributes), nil
+}
+
+func (t ProjectEnvironmentsType) ValueType(ctx context.Context) attr.Value {
+	return ProjectEnvironmentsValue{}
+}
+
+var _ basetypes.ObjectValuable = ProjectEnvironmentsValue{}
+
+type ProjectEnvironmentsValue struct {
+	Color     basetypes.StringValue `tfsdk:"color"`
+	Id        basetypes.StringValue `tfsdk:"id"`
+	Live      basetypes.BoolValue   `tfsdk:"live"`
+	Name      basetypes.StringValue `tfsdk:"name"`
+	ProjectId basetypes.StringValue `tfsdk:"project_id"`
+	Slug      basetypes.StringValue `tfsdk:"slug"`
+	state     attr.ValueState
+}
+
+func (v ProjectEnvironmentsValue) ToTerraformValue(ctx context.Context) (tftypes.Value, error) {
+	attrTypes := make(map[string]tftypes.Type, 6)
+
+	var val tftypes.Value
+	var err error
+
+	attrTypes["color"] = basetypes.StringType{}.TerraformType(ctx)
+	attrTypes["id"] = basetypes.StringType{}.TerraformType(ctx)
+	attrTypes["live"] = basetypes.BoolType{}.TerraformType(ctx)
+	attrTypes["name"] = basetypes.StringType{}.TerraformType(ctx)
+	attrTypes["project_id"] = basetypes.StringType{}.TerraformType(ctx)
+	attrTypes["slug"] = basetypes.StringType{}.TerraformType(ctx)
+
+	objectType := tftypes.Object{AttributeTypes: attrTypes}
+
+	switch v.state {
+	case attr.ValueStateKnown:
+		vals := make(map[string]tftypes.Value, 6)
+
+		val, err = v.Color.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["color"] = val
+
+		val, err = v.Id.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["id"] = val
+
+		val, err = v.Live.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["live"] = val
+
+		val, err = v.Name.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["name"] = val
+
+		val, err = v.ProjectId.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["project_id"] = val
+
+		val, err = v.Slug.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["slug"] = val
+
+		if err := tftypes.ValidateValue(objectType, vals); err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		return tftypes.NewValue(objectType, vals), nil
+	case attr.ValueStateNull:
+		return tftypes.NewValue(objectType, nil), nil
+	case attr.ValueStateUnknown:
+		return tftypes.NewValue(objectType, tftypes.UnknownValue), nil
+	default:
+		panic(fmt.Sprintf("unhandled Object state in ToTerraformValue: %s", v.state))
+	}
+}
+
+func (v ProjectEnvironmentsValue) IsNull() bool {
+	return v.state == attr.ValueStateNull
+}
+
+func (v ProjectEnvironmentsValue) IsUnknown() bool {
+	return v.state == attr.ValueStateUnknown
+}
+
+func (v ProjectEnvironmentsValue) String() string {
+	return "ProjectEnvironmentsValue"
+}
+
+func (v ProjectEnvironmentsValue) ToObjectValue(ctx context.Context) (basetypes.ObjectValue, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	attributeTypes := map[string]attr.Type{
+		"color":      basetypes.StringType{},
+		"id":         basetypes.StringType{},
+		"live":       basetypes.BoolType{},
+		"name":       basetypes.StringType{},
+		"project_id": basetypes.StringType{},
+		"slug":       basetypes.StringType{},
+	}
+
+	if v.IsNull() {
+		return types.ObjectNull(attributeTypes), diags
+	}
+
+	if v.IsUnknown() {
+		return types.ObjectUnknown(attributeTypes), diags
+	}
+
+	objVal, diags := types.ObjectValue(
+		attributeTypes,
+		map[string]attr.Value{
+			"color":      v.Color,
+			"id":         v.Id,
+			"live":       v.Live,
+			"name":       v.Name,
+			"project_id": v.ProjectId,
+			"slug":       v.Slug,
+		})
+
+	return objVal, diags
+}
+
+func (v ProjectEnvironmentsValue) Equal(o attr.Value) bool {
+	other, ok := o.(ProjectEnvironmentsValue)
+
+	if !ok {
+		return false
+	}
+
+	if v.state != other.state {
+		return false
+	}
+
+	if v.state != attr.ValueStateKnown {
+		return true
+	}
+
+	if !v.Color.Equal(other.Color) {
+		return false
+	}
+
+	if !v.Id.Equal(other.Id) {
+		return false
+	}
+
+	if !v.Live.Equal(other.Live) {
+		return false
+	}
+
+	if !v.Name.Equal(other.Name) {
+		return false
+	}
+
+	if !v.ProjectId.Equal(other.ProjectId) {
+		return false
+	}
+
+	if !v.Slug.Equal(other.Slug) {
+		return false
+	}
+
+	return true
+}
+
+func (v ProjectEnvironmentsValue) Type(ctx context.Context) attr.Type {
+	return ProjectEnvironmentsType{
+		basetypes.ObjectType{
+			AttrTypes: v.AttributeTypes(ctx),
+		},
+	}
+}
+
+func (v ProjectEnvironmentsValue) AttributeTypes(ctx context.Context) map[string]attr.Type {
+	return map[string]attr.Type{
+		"color":      basetypes.StringType{},
+		"id":         basetypes.StringType{},
+		"live":       basetypes.BoolType{},
+		"name":       basetypes.StringType{},
+		"project_id": basetypes.StringType{},
+		"slug":       basetypes.StringType{},
+	}
 }

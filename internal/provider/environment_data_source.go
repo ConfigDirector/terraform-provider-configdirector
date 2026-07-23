@@ -67,8 +67,6 @@ func (d *EnvironmentDataSource) Read(ctx context.Context, req datasource.ReadReq
 	state.Slug = stringValue(env.Slug)
 	state.Color = stringValue(env.Color)
 	state.ProjectId = stringValue(env.ProjectID)
-	state.CreatedAt = stringValue(env.CreatedAt)
-	state.UpdatedAt = stringValue(env.UpdatedAt)
 	state.Live = boolValue(env.Live)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)

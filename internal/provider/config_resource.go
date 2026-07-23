@@ -37,7 +37,6 @@ type ConfigResource struct {
 // or Plan.Get/State.Set fail at runtime, so this can't just reuse ConfigModel.
 type ConfigResourceModel struct {
 	Client         types.Bool   `tfsdk:"client"`
-	CreatedAt      types.String `tfsdk:"created_at"`
 	DeprecatedKeys types.List   `tfsdk:"deprecated_keys"`
 	Description    types.String `tfsdk:"description"`
 	Id             types.String `tfsdk:"id"`
@@ -48,7 +47,6 @@ type ConfigResourceModel struct {
 	Server         types.Bool   `tfsdk:"server"`
 	State          types.String `tfsdk:"state"`
 	Type           types.String `tfsdk:"type"`
-	UpdatedAt      types.String `tfsdk:"updated_at"`
 	DefaultValue   types.String `tfsdk:"default_value"`
 }
 
@@ -131,8 +129,6 @@ func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel
 	m.State = stringValue(c.State)
 	m.Client = boolValue(c.Client)
 	m.Server = boolValue(c.Server)
-	m.CreatedAt = stringValue(c.CreatedAt)
-	m.UpdatedAt = stringValue(c.UpdatedAt)
 
 	keysList, err := deprecatedKeysListValue(ctx, c.DeprecatedKeys)
 	if err != nil {

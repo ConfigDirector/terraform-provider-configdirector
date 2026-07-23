@@ -93,7 +93,6 @@ func (d *ConfigsDataSource) Read(ctx context.Context, req datasource.ReadRequest
 			ConfigsValue{}.AttributeTypes(ctx),
 			map[string]attr.Value{
 				"client":          boolValue(cfg.Client),
-				"created_at":      stringValue(cfg.CreatedAt),
 				"deprecated_keys": keysList,
 				"description":     stringPtrValue(cfg.Description),
 				"id":              stringValue(cfg.ID),
@@ -104,7 +103,6 @@ func (d *ConfigsDataSource) Read(ctx context.Context, req datasource.ReadRequest
 				"server":          boolValue(cfg.Server),
 				"state":           stringValue(cfg.State),
 				"type":            stringValue(cfg.Type),
-				"updated_at":      stringValue(cfg.UpdatedAt),
 			},
 		)
 	}
