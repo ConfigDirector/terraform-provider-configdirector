@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/dynamicplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -32,18 +33,18 @@ type ConfigResource struct {
 	client *client.Client
 }
 
-// ConfigResourceModel omits defaultValue/variations/targets: the OpenAPI spec
-// describes them as polymorphic (anyOf/oneOf) unions that don't map onto a
-// static Terraform schema. default_value is added back by hand as a
-// JSON-encoded string, since the API requires it on create; it has no update
-// path, so changes require replacement. type_options is the same kind of
-// polymorphic union, but the API accepts it back on update, so it's modeled
-// as Terraform's dynamic type (see dynamicFromJSON/jsonFromDynamic in
-// convert.go) rather than a string: this lets it be written as a real nested
-// HCL structure - whichever shape matches the config's type - with the
-// backend validating it, instead of the provider trying to model every
-// variant. variations/targets aren't modeled at all yet (see the
-// targeting-rules resource discussion).
+// ConfigResourceModel omits targets: the OpenAPI spec describes it as a
+// polymorphic (anyOf/oneOf) union that doesn't map onto a static Terraform
+// schema (see the targeting-rules resource discussion). default_value/
+// type_options/variations are the same kind of polymorphic union, but each
+// is modeled with Terraform's dynamic type (see dynamicFromJSON/
+// jsonFromDynamic in convert.go) so they can be written as plain HCL values
+// (a string, number, bool, or nested structure, whichever fits) instead of
+// requiring a JSON-encoded string. default_value in particular is:
+//   - Required, since the API requires it on create
+//   - never reconciled against server state: the API never returns it back
+//     (see configToModel), so it's write-only from Terraform's perspective
+//   - RequiresReplace, since the API has no endpoint to change it in place
 type ConfigResourceModel struct {
 	Id             types.String  `tfsdk:"id"`
 	ProjectId      types.String  `tfsdk:"project_id"`
@@ -56,8 +57,9 @@ type ConfigResourceModel struct {
 	State          types.String  `tfsdk:"state"`
 	Client         types.Bool    `tfsdk:"client"`
 	Server         types.Bool    `tfsdk:"server"`
+	Variations     types.Dynamic `tfsdk:"variations"`
 	DeprecatedKeys types.List    `tfsdk:"deprecated_keys"`
-	DefaultValue   types.String  `tfsdk:"default_value"`
+	DefaultValue   types.Dynamic `tfsdk:"default_value"`
 }
 
 func (r *ConfigResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -127,6 +129,23 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Computed: true,
 				Default:  booldefault.StaticBool(true),
 			},
+			// A list of objects with a per-item dynamic "value" isn't possible
+			// here: terraform-plugin-framework doesn't support a dynamic type
+			// nested inside a collection type. Instead the whole array is one
+			// dynamic value, e.g. variations = [{ name = "on", value = true },
+			// { name = "off", value = false }] - see variationsToDynamicJSON/
+			// variationsFromDynamic in convert.go.
+			"variations": schema.DynamicAttribute{
+				Optional: true,
+				Computed: true,
+				Description: "Per-variation values for this config, as a list of {name, value} objects. Only valid " +
+					"when role is \"experiment\"; the API rejects it (and this provider validates it client-side) " +
+					"for any other role. Not validated by Terraform beyond that - the structure you provide is " +
+					"passed through as-is and validated by the API.",
+				Validators: []validator.Dynamic{
+					variationsRequireExperimentRole{},
+				},
+			},
 			"deprecated_keys": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
@@ -138,15 +157,50 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					},
 				},
 			},
-			"default_value": schema.StringAttribute{
+			"default_value": schema.DynamicAttribute{
 				Required: true,
-				Description: "JSON-encoded default value for this config (e.g. \"true\", \"42\", \"\\\"some string\\\"\"). " +
+				Description: "Default value for this config - a plain string, number, or bool matching \"type\". " +
 					"The ConfigDirector API has no endpoint that returns the global default back, so this value is " +
 					"write-only from Terraform's perspective: it is sent on create and never reconciled against server " +
 					"state, and cannot be changed in place (any change forces replacement).",
-				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
+				PlanModifiers: []planmodifier.Dynamic{dynamicplanmodifier.RequiresReplace()},
 			},
 		},
+	}
+}
+
+// variationsRequireExperimentRole rejects a non-null "variations" value
+// unless the sibling "role" attribute is "experiment". This can't be
+// expressed as a per-attribute validator.String on "role" (it needs to see
+// both attributes), so it's implemented as a validator.Dynamic on
+// "variations" that reads "role" out of the surrounding config instead.
+type variationsRequireExperimentRole struct{}
+
+func (v variationsRequireExperimentRole) Description(ctx context.Context) string {
+	return "variations can only be set when role is \"experiment\""
+}
+
+func (v variationsRequireExperimentRole) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v variationsRequireExperimentRole) ValidateDynamic(ctx context.Context, req validator.DynamicRequest, resp *validator.DynamicResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+
+	var role types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("role"), &role)...)
+	if resp.Diagnostics.HasError() || role.IsUnknown() {
+		return
+	}
+
+	if role.ValueString() != "experiment" {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid variations",
+			"variations can only be set when role is \"experiment\", got role: "+role.ValueString(),
+		)
 	}
 }
 
@@ -182,6 +236,12 @@ func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel
 	}
 	m.TypeOptions = typeOptions
 
+	variations, err := dynamicFromJSON(variationsToDynamicJSON(c.Variations))
+	if err != nil {
+		return fmt.Errorf("converting variations: %w", err)
+	}
+	m.Variations = variations
+
 	keysList, diags := deprecatedKeysListValue(ctx, c.DeprecatedKeys)
 	if diags.HasError() {
 		return fmt.Errorf("%v", diags)
@@ -197,8 +257,8 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	var defaultVal any
-	if err := jsonUnmarshalString(plan.DefaultValue.ValueString(), &defaultVal); err != nil {
+	defaultVal, err := jsonFromDynamic(plan.DefaultValue)
+	if err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("default_value"), "Invalid default_value", err.Error())
 		return
 	}
@@ -206,6 +266,12 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 	typeOptions, err := jsonFromDynamic(plan.TypeOptions)
 	if err != nil {
 		resp.Diagnostics.AddAttributeError(path.Root("type_options"), "Invalid type_options", err.Error())
+		return
+	}
+
+	variations, err := variationsFromDynamic(plan.Variations)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(path.Root("variations"), "Invalid variations", err.Error())
 		return
 	}
 
@@ -220,6 +286,7 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		TypeOptions:  typeOptions,
 		Server:       &server,
 		Client:       &clientFlag,
+		Variations:   variations,
 		DefaultValue: defaultVal,
 	})
 	if err != nil {
@@ -279,6 +346,12 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	variations, err := variationsFromDynamic(plan.Variations)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(path.Root("variations"), "Invalid variations", err.Error())
+		return
+	}
+
 	cfg, err := r.client.UpdateConfig(ctx, plan.ProjectId.ValueString(), state.Key.ValueString(), client.UpdateConfigRequest{
 		Key:         plan.Key.ValueString(),
 		Description: stringPtrFromValue(plan.Description),
@@ -286,6 +359,7 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		Lifetime:    plan.Lifetime.ValueString(),
 		Type:        plan.Type.ValueString(),
 		TypeOptions: typeOptions,
+		Variations:  variations,
 		Server:      plan.Server.ValueBool(),
 		Client:      plan.Client.ValueBool(),
 	})

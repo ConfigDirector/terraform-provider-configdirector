@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -12,10 +11,6 @@ import (
 
 	"github.com/alejandro/terraform-provider-configdirector/internal/client"
 )
-
-func jsonUnmarshalString(s string, out any) error {
-	return json.Unmarshal([]byte(s), out)
-}
 
 func stringValue(s string) types.String {
 	if s == "" {
@@ -304,4 +299,61 @@ func jsonFromAttrValue(v attr.Value) (any, error) {
 	default:
 		return nil, fmt.Errorf("unsupported attr.Value type %T", v)
 	}
+}
+
+// Variations is modeled as a single top-level types.Dynamic covering the
+// whole array, not a ListNestedAttribute with a per-item dynamic "value":
+// terraform-plugin-framework doesn't support a dynamic type nested inside a
+// collection type ("Dynamic types inside of collections are not currently
+// supported"). dynamicFromJSON/jsonFromDynamic already handle arbitrary
+// nested JSON generically, so variationsToDynamicJSON/variationsFromDynamic
+// just reshape between []client.Variation and the plain
+// []any{map[string]any{...}} shape those functions expect.
+
+// variationsToDynamicJSON only sets the "name" key when present. Whether the
+// user's HCL included a "name" for a given variation determines that
+// element's object type (an object with vs. without a "name" attribute);
+// always including the key here (even as null) would produce a shape that
+// doesn't match what Terraform parsed from a config that omitted it,
+// surfacing as "provider produced inconsistent result".
+func variationsToDynamicJSON(variations []client.Variation) any {
+	if variations == nil {
+		return nil
+	}
+	out := make([]any, len(variations))
+	for i, v := range variations {
+		m := map[string]any{"value": v.Value}
+		if v.Name != nil {
+			m["name"] = *v.Name
+		}
+		out[i] = m
+	}
+	return out
+}
+
+func variationsFromDynamic(d types.Dynamic) ([]client.Variation, error) {
+	raw, err := jsonFromDynamic(d)
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("variations must be a list of objects, got %T", raw)
+	}
+	out := make([]client.Variation, len(items))
+	for i, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("each variation must be an object, got %T", item)
+		}
+		v := client.Variation{Value: m["value"]}
+		if name, ok := m["name"].(string); ok {
+			v.Name = &name
+		}
+		out[i] = v
+	}
+	return out, nil
 }

@@ -208,15 +208,25 @@ type DeprecatedKey struct {
 	IsPrimary bool   `json:"isPrimary"`
 }
 
-// Config is the API representation of a config. defaultValue, variations,
-// and targets are intentionally not modeled here: they are polymorphic/
-// union-typed fields in the OpenAPI spec that don't map onto a static Go
-// struct, so the resource treats them as write-only, JSON-encoded strings
-// (see ConfigResourceModel in the provider package). typeOptions is the same
-// kind of polymorphic union, but it's modeled here as `any` (decoded from/
-// encoded to arbitrary JSON) since the provider represents it with
-// Terraform's dynamic type instead of a string - see dynamicFromJSON /
-// jsonFromDynamic in the provider package.
+// Variation is a config's per-variation value, valid only for "experiment"
+// role configs. Value is a boolean|string|number union - the same kind of
+// polymorphic field as typeOptions - and is modeled as `any` here, with the
+// provider representing it as Terraform's dynamic type (see dynamicFromJSON/
+// jsonFromDynamic in the provider package).
+type Variation struct {
+	Name  *string `json:"name"`
+	Value any     `json:"value"`
+}
+
+// Config is the API representation of a config. defaultValue and targets are
+// intentionally not modeled here: they are polymorphic/union-typed fields in
+// the OpenAPI spec that don't map onto a static Go struct, so the resource
+// treats them as write-only, JSON-encoded strings (see ConfigResourceModel in
+// the provider package). typeOptions and variations are the same kind of
+// polymorphic union, but they're modeled here (decoded from/encoded to
+// arbitrary JSON) since the provider represents them with Terraform's dynamic
+// type instead of a string - see dynamicFromJSON/jsonFromDynamic in the
+// provider package.
 type Config struct {
 	ID             string          `json:"id"`
 	ProjectID      string          `json:"projectId"`
@@ -229,21 +239,23 @@ type Config struct {
 	State          string          `json:"state"`
 	Client         bool            `json:"client"`
 	Server         bool            `json:"server"`
+	Variations     []Variation     `json:"variations"`
 	CreatedAt      string          `json:"createdAt"`
 	UpdatedAt      string          `json:"updatedAt"`
 	DeprecatedKeys []DeprecatedKey `json:"deprecatedKeys"`
 }
 
 type CreateConfigRequest struct {
-	Key          string  `json:"key"`
-	Description  *string `json:"description,omitempty"`
-	Role         string  `json:"role"`
-	Lifetime     string  `json:"lifetime"`
-	Type         string  `json:"type"`
-	TypeOptions  any     `json:"typeOptions,omitempty"`
-	Server       *bool   `json:"server,omitempty"`
-	Client       *bool   `json:"client,omitempty"`
-	DefaultValue any     `json:"defaultValue"`
+	Key          string      `json:"key"`
+	Description  *string     `json:"description,omitempty"`
+	Role         string      `json:"role"`
+	Lifetime     string      `json:"lifetime"`
+	Type         string      `json:"type"`
+	TypeOptions  any         `json:"typeOptions,omitempty"`
+	Server       *bool       `json:"server,omitempty"`
+	Client       *bool       `json:"client,omitempty"`
+	Variations   []Variation `json:"variations,omitempty"`
+	DefaultValue any         `json:"defaultValue"`
 }
 
 type updateConfigAvailability struct {
@@ -258,6 +270,7 @@ type updateConfigRequest struct {
 	Lifetime     string                    `json:"lifetime,omitempty"`
 	Type         string                    `json:"type,omitempty"`
 	TypeOptions  any                       `json:"typeOptions,omitempty"`
+	Variations   []Variation               `json:"variations,omitempty"`
 	Availability *updateConfigAvailability `json:"availability,omitempty"`
 }
 
@@ -271,6 +284,7 @@ type UpdateConfigRequest struct {
 	Lifetime    string
 	Type        string
 	TypeOptions any
+	Variations  []Variation
 	Server      bool
 	Client      bool
 }
@@ -305,6 +319,7 @@ func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req Up
 		Lifetime:    req.Lifetime,
 		Type:        req.Type,
 		TypeOptions: req.TypeOptions,
+		Variations:  req.Variations,
 		Availability: &updateConfigAvailability{
 			Server: req.Server,
 			Client: req.Client,
