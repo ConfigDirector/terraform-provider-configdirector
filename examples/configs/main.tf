@@ -64,3 +64,55 @@ resource "configdirector_config" "example_experiment" {
 
   initial_value = "Two"
 }
+
+resource "configdirector_config_targeting_rules" "example_experiment_test_rules" {
+  project_id = configdirector_project.example.id
+  config_key = configdirector_config.example_experiment.key
+  environment_slug = "test"
+  default_value = "One"
+  rules = [
+    {
+      # Conditional rule: VIP test users always get "Three", regardless of
+      # the rollout below.
+      id     = provider::configdirector::rule_id("example-experiment-test-vip-users")
+      type   = "conditional"
+      order  = 0
+      target = "value"
+      value  = "Three"
+      conditions = [
+        {
+          id           = provider::configdirector::rule_id("example-experiment-test-vip-users-identifier")
+          attribute    = "identifier"
+          operator     = "is one of"
+          targetType   = "text"
+          targetValues = ["user-123", "user-457"]
+        }
+      ]
+    },
+    {
+      # Percentage rollout for everyone else: 50/30/20 split across the
+      # config's three variations.
+      id     = provider::configdirector::rule_id("example-experiment-test-rollout")
+      type   = "percentage"
+      order  = 1
+      target = "percentage"
+      percentages = [
+        {
+          id         = provider::configdirector::rule_id("example-experiment-test-rollout-one")
+          percentage = 50
+          value      = "One"
+        },
+        {
+          id         = provider::configdirector::rule_id("example-experiment-test-rollout-two")
+          percentage = 30
+          value      = "Two"
+        },
+        {
+          id         = provider::configdirector::rule_id("example-experiment-test-rollout-three")
+          percentage = 20
+          value      = "Three"
+        },
+      ]
+    },
+  ]
+}
