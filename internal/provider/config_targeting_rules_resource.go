@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -117,11 +118,84 @@ func (r *ConfigTargetingRulesResource) Schema(ctx context.Context, req resource.
 					"an \"id\" (the API requires it, and Terraform has no way for this provider to generate one " +
 					"itself - see RuleIDFunction/rule_id_function.go for why): use the " +
 					"provider::configdirector::rule_id(\"some-stable-name\") function rather than typing a UUID " +
-					"by hand. Write-only: the API embeds extra generated fields (e.g. valueId) into whatever you " +
-					"write, so unlike most attributes this is never reconciled against a subsequent read - " +
-					"external changes to targeting rules won't show up as drift.",
+					"by hand, and give each rule/condition/percentage-bucket its own distinct seed - ids must be " +
+					"unique across the entire value (rule ids, condition ids, and percentage-bucket ids all share " +
+					"one namespace, including across different rules). Write-only: the API embeds extra generated " +
+					"fields (e.g. valueId) into whatever you write, so unlike most attributes this is never " +
+					"reconciled against a subsequent read - external changes to targeting rules won't show up as " +
+					"drift.",
+				Validators: []validator.Dynamic{rulesUniqueIDs{}},
 			},
 		},
+	}
+}
+
+// rulesUniqueIDs rejects a "rules" value containing a duplicate "id" -
+// whether on two rules, two conditions, two percentage-buckets, or any
+// mixture of those, including across different rules. The ids appear to
+// share one namespace server-side (rule/condition/percentage-bucket ids all
+// show up alongside generated cross-reference fields like valueId), so a
+// duplicate anywhere in the tree is treated as a collision, not just within
+// its own immediate list.
+type rulesUniqueIDs struct{}
+
+func (v rulesUniqueIDs) Description(ctx context.Context) string {
+	return "Ensures every rule/condition/percentage-bucket id in this value is unique."
+}
+
+func (v rulesUniqueIDs) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v rulesUniqueIDs) ValidateDynamic(ctx context.Context, req validator.DynamicRequest, resp *validator.DynamicResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+
+	raw, err := jsonFromDynamic(req.ConfigValue)
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(req.Path, "Invalid rules", err.Error())
+		return
+	}
+
+	counts := map[string]int{}
+	collectIDs(raw, counts)
+
+	var duplicates []string
+	for id, count := range counts {
+		if count > 1 {
+			duplicates = append(duplicates, id)
+		}
+	}
+	if len(duplicates) == 0 {
+		return
+	}
+	sort.Strings(duplicates)
+
+	resp.Diagnostics.AddAttributeError(
+		req.Path,
+		"Duplicate rule/condition/percentage-bucket id",
+		"Each id must be unique across the whole rules value - rule ids, condition ids, and percentage-bucket "+
+			"ids all share one namespace, including across different rules. Give each entry its own seed for "+
+			"provider::configdirector::rule_id(...). Duplicated id(s): "+strings.Join(duplicates, ", "),
+	)
+}
+
+// collectIDs recursively tallies every "id" string value found anywhere in a
+// JSON-like tree (as produced by jsonFromDynamic).
+func collectIDs(v any, counts map[string]int) {
+	switch x := v.(type) {
+	case map[string]any:
+		if id, ok := x["id"].(string); ok && id != "" {
+			counts[id]++
+		}
+		for _, val := range x {
+			collectIDs(val, counts)
+		}
+	case []any:
+		for _, item := range x {
+			collectIDs(item, counts)
+		}
 	}
 }
 
