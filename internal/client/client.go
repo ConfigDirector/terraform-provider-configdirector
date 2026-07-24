@@ -218,15 +218,39 @@ type Variation struct {
 	Value any     `json:"value"`
 }
 
-// Config is the API representation of a config. defaultValue and targets are
-// intentionally not modeled here: they are polymorphic/union-typed fields in
-// the OpenAPI spec that don't map onto a static Go struct, so the resource
-// treats them as write-only, JSON-encoded strings (see ConfigResourceModel in
-// the provider package). typeOptions and variations are the same kind of
-// polymorphic union, but they're modeled here (decoded from/encoded to
-// arbitrary JSON) since the provider represents them with Terraform's dynamic
-// type instead of a string - see dynamicFromJSON/jsonFromDynamic in the
-// provider package.
+// ConfigTargetEnvironment is the environment summary embedded in each of a
+// config's "targets" entries.
+type ConfigTargetEnvironment struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// ConfigTarget is a config's per-environment targeting state: its default
+// value and targeting rules for one specific environment. DefaultValue is
+// always a string here regardless of what type was written (confirmed
+// empirically: sending a bool or number back gets you a stringified version
+// on read). Rules is a deeply-nested discriminated union (conditional-vs-
+// percentage rules, each with their own condition/bucket shapes) that
+// doesn't map onto a static Go struct any more than typeOptions/variations
+// do, so it's modeled as `any` here, with the provider representing it as
+// Terraform's dynamic type (see dynamicFromJSON/jsonFromDynamic in the
+// provider package).
+type ConfigTarget struct {
+	ID           string                  `json:"id"`
+	DefaultValue *string                 `json:"defaultValue"`
+	Rules        any                     `json:"rules"`
+	Environment  ConfigTargetEnvironment `json:"environment"`
+}
+
+// Config is the API representation of a config. defaultValue is intentionally
+// not modeled here: it's a polymorphic/union-typed field in the OpenAPI spec
+// that doesn't map onto a static Go struct, so the resource treats it as a
+// write-only, JSON-encoded string (see ConfigResourceModel in the provider
+// package). typeOptions and variations are the same kind of polymorphic
+// union, but they're modeled here (decoded from/encoded to arbitrary JSON)
+// since the provider represents them with Terraform's dynamic type instead of
+// a string - see dynamicFromJSON/jsonFromDynamic in the provider package.
 type Config struct {
 	ID             string          `json:"id"`
 	ProjectID      string          `json:"projectId"`
@@ -240,6 +264,7 @@ type Config struct {
 	Client         bool            `json:"client"`
 	Server         bool            `json:"server"`
 	Variations     []Variation     `json:"variations"`
+	Targets        []ConfigTarget  `json:"targets"`
 	CreatedAt      string          `json:"createdAt"`
 	UpdatedAt      string          `json:"updatedAt"`
 	DeprecatedKeys []DeprecatedKey `json:"deprecatedKeys"`
@@ -334,6 +359,32 @@ func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req Up
 func (c *Client) DeleteConfig(ctx context.Context, projectID, key string) error {
 	path := fmt.Sprintf("/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
 	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
+type updateConfigTargetsRequest struct {
+	EnvironmentID string `json:"environmentId"`
+	DefaultValue  any    `json:"defaultValue"`
+	Rules         any    `json:"rules"`
+}
+
+type UpdateConfigTargetsRequest struct {
+	EnvironmentID string
+	DefaultValue  any
+	Rules         any
+}
+
+// UpdateConfigTargets PUTs a config's targeting rules for one environment.
+// There's no dedicated GET for a single target: callers should fetch the
+// parent config (GetConfig) afterward and look up the matching entry in its
+// Targets by environment ID, the same way Read works for this sub-resource.
+func (c *Client) UpdateConfigTargets(ctx context.Context, projectID, configKey string, req UpdateConfigTargetsRequest) error {
+	path := fmt.Sprintf("/projects/%s/configs/%s/targets", pathEscape(projectID), pathEscape(configKey))
+	body := updateConfigTargetsRequest{
+		EnvironmentID: req.EnvironmentID,
+		DefaultValue:  req.DefaultValue,
+		Rules:         req.Rules,
+	}
+	return c.do(ctx, http.MethodPut, path, body, nil)
 }
 
 func (c *Client) ListConfigs(ctx context.Context, projectID string) ([]Config, error) {

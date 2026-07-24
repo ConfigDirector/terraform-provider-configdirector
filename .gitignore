@@ -1,4 +1,5 @@
 .env
+.claude
 terraform-provider-configdirector
 bin/
 *.tfstate

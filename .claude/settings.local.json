@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(export CONFIGDIRECTOR_TOKEN=\"ak_2b4d3442d3c789031651b0c1cce22fcceb1dcc9ff980a37e1f48b885fff4259e76abc8b487af\")",
-      "Bash(curl -s -o /dev/null -w '%{http_code}\\\\n' -X DELETE -H 'Authorization: Bearer ak_2b4d3442d3c789031651b0c1cce22fcceb1dcc9ff980a37e1f48b885fff4259e76abc8b487af' http://localhost:3001/api/v1/projects/__TRACKED_VAR__/configs/patch-debug)"
-    ]
-  }
-}

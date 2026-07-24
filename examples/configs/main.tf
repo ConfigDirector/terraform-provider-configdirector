@@ -28,6 +28,20 @@ resource "configdirector_config" "example_flag" {
   initial_value = false
 }
 
+resource "configdirector_config_targeting_rules" "example_flag_test_rules" {
+  project_id = configdirector_project.example.id
+  config_key = configdirector_config.example_flag.key
+  environment_slug = "test"
+  default_value = true
+}
+
+resource "configdirector_config_targeting_rules" "example_flag_prod_rules" {
+  project_id = configdirector_project.example.id
+  config_key = configdirector_config.example_flag.key
+  environment_slug = "production"
+  default_value = false
+}
+
 resource "configdirector_config" "example_experiment" {
   project_id = configdirector_project.example.id
   key        = "example-experiment"

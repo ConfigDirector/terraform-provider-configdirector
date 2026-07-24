@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -15,7 +16,10 @@ import (
 
 const defaultHost = "http://localhost:3001/api/v1"
 
-var _ provider.Provider = &ConfigDirectorProvider{}
+var (
+	_ provider.Provider              = &ConfigDirectorProvider{}
+	_ provider.ProviderWithFunctions = &ConfigDirectorProvider{}
+)
 
 type ConfigDirectorProvider struct {
 	version string
@@ -90,6 +94,7 @@ func (p *ConfigDirectorProvider) Resources(ctx context.Context) []func() resourc
 		NewProjectResource,
 		NewEnvironmentResource,
 		NewConfigResource,
+		NewConfigTargetingRulesResource,
 	}
 }
 
@@ -101,5 +106,11 @@ func (p *ConfigDirectorProvider) DataSources(ctx context.Context) []func() datas
 		NewEnvironmentsDataSource,
 		NewConfigDataSource,
 		NewConfigsDataSource,
+	}
+}
+
+func (p *ConfigDirectorProvider) Functions(ctx context.Context) []func() function.Function {
+	return []func() function.Function{
+		NewRuleIDFunction,
 	}
 }
