@@ -130,6 +130,22 @@ func (c *Client) DeleteProject(ctx context.Context, projectID string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/projects/"+pathEscape(projectID), nil, nil)
 }
 
+type UpdateProjectRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// UpdateProject responds 204 No Content on success (no updated project in
+// the body, unlike UpdateEnvironment), so the fresh project is fetched with
+// a follow-up GetProject.
+func (c *Client) UpdateProject(ctx context.Context, projectID string, req UpdateProjectRequest) (*Project, error) {
+	if err := c.do(ctx, http.MethodPut, "/v1/projects/"+pathEscape(projectID), req, nil); err != nil {
+		return nil, err
+	}
+	return c.GetProject(ctx, projectID)
+}
+
 // --- Environments ---
 
 type Environment struct {

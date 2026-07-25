@@ -43,9 +43,6 @@ func (r *ProjectResource) Metadata(ctx context.Context, req resource.MetadataReq
 	resp.TypeName = req.ProviderTypeName + "_project"
 }
 
-// The ConfigDirector API has no update endpoint for projects, so name/slug
-// changes must force a replacement rather than an in-place update.
-//
 // "environments" is computed-only: Terraform can't register the
 // project's auto-created "test"/"production" environments as independently
 // managed configdirector_environment resources on its own (a provider's
@@ -63,7 +60,6 @@ func (r *ProjectResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Validators: []validator.String{
 					stringvalidator.LengthBetween(1, 255),
 				},
-				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"organization_id": schema.StringAttribute{
 				Computed: true,
@@ -74,7 +70,6 @@ func (r *ProjectResource) Schema(ctx context.Context, req resource.SchemaRequest
 					stringvalidator.LengthBetween(1, 255),
 					stringvalidator.RegexMatches(regexp.MustCompile(`^[\da-z]+(?:[-_][\da-z]+)*$`), ""),
 				},
-				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"environments": schema.ListNestedAttribute{
 				Computed: true,
@@ -167,13 +162,31 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
-// Update is unreachable in practice: name/slug are the only user-settable
-// attributes and both require replacement. It's implemented defensively in
-// case the schema gains an in-place-updatable attribute later.
 func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan ProjectModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var state ProjectModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	project, err := r.client.UpdateProject(ctx, state.Id.ValueString(), client.UpdateProjectRequest{
+		ID:   state.Id.ValueString(),
+		Name: plan.Name.ValueString(),
+		Slug: plan.Slug.ValueString(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Error Updating Project", err.Error())
+		return
+	}
+
+	if err := projectToModel(ctx, project, &plan); err != nil {
+		resp.Diagnostics.AddError("Error Processing Project Response", err.Error())
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
