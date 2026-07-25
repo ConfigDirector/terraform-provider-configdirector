@@ -104,7 +104,7 @@ type CreateProjectRequest struct {
 
 func (c *Client) CreateProject(ctx context.Context, req CreateProjectRequest) (*Project, error) {
 	var out Project
-	if err := c.do(ctx, http.MethodPost, "/projects", req, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/projects", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -112,7 +112,7 @@ func (c *Client) CreateProject(ctx context.Context, req CreateProjectRequest) (*
 
 func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, error) {
 	var out Project
-	if err := c.do(ctx, http.MethodGet, "/projects/"+pathEscape(projectID), nil, &out); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/v1/projects/"+pathEscape(projectID), nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -120,14 +120,14 @@ func (c *Client) GetProject(ctx context.Context, projectID string) (*Project, er
 
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	var out []Project
-	if err := c.do(ctx, http.MethodGet, "/projects", nil, &out); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/v1/projects", nil, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
 func (c *Client) DeleteProject(ctx context.Context, projectID string) error {
-	return c.do(ctx, http.MethodDelete, "/projects/"+pathEscape(projectID), nil, nil)
+	return c.do(ctx, http.MethodDelete, "/v1/projects/"+pathEscape(projectID), nil, nil)
 }
 
 // --- Environments ---
@@ -160,7 +160,7 @@ type UpdateEnvironmentRequest struct {
 
 func (c *Client) CreateEnvironment(ctx context.Context, projectID string, req CreateEnvironmentRequest) (*Environment, error) {
 	var out Environment
-	path := fmt.Sprintf("/projects/%s/environments", pathEscape(projectID))
+	path := fmt.Sprintf("/v1/projects/%s/environments", pathEscape(projectID))
 	if err := c.do(ctx, http.MethodPost, path, req, &out); err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (c *Client) CreateEnvironment(ctx context.Context, projectID string, req Cr
 
 func (c *Client) GetEnvironment(ctx context.Context, projectID, environmentID string) (*Environment, error) {
 	var out Environment
-	path := fmt.Sprintf("/projects/%s/environments/%s", pathEscape(projectID), pathEscape(environmentID))
+	path := fmt.Sprintf("/v1/projects/%s/environments/%s", pathEscape(projectID), pathEscape(environmentID))
 	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func (c *Client) GetEnvironment(ctx context.Context, projectID, environmentID st
 
 func (c *Client) UpdateEnvironment(ctx context.Context, projectID, environmentID string, req UpdateEnvironmentRequest) (*Environment, error) {
 	var out Environment
-	path := fmt.Sprintf("/projects/%s/environments/%s", pathEscape(projectID), pathEscape(environmentID))
+	path := fmt.Sprintf("/v1/projects/%s/environments/%s", pathEscape(projectID), pathEscape(environmentID))
 	if err := c.do(ctx, http.MethodPut, path, req, &out); err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func (c *Client) UpdateEnvironment(ctx context.Context, projectID, environmentID
 
 func (c *Client) ListEnvironments(ctx context.Context, projectID string) ([]Environment, error) {
 	var out []Environment
-	path := fmt.Sprintf("/projects/%s/environments", pathEscape(projectID))
+	path := fmt.Sprintf("/v1/projects/%s/environments", pathEscape(projectID))
 	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (c *Client) ListEnvironments(ctx context.Context, projectID string) ([]Envi
 }
 
 func (c *Client) DeleteEnvironment(ctx context.Context, projectID, environmentID string) error {
-	path := fmt.Sprintf("/projects/%s/environments/%s", pathEscape(projectID), pathEscape(environmentID))
+	path := fmt.Sprintf("/v1/projects/%s/environments/%s", pathEscape(projectID), pathEscape(environmentID))
 	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }
 
@@ -316,7 +316,7 @@ type UpdateConfigRequest struct {
 
 func (c *Client) CreateConfig(ctx context.Context, projectID string, req CreateConfigRequest) (*Config, error) {
 	var out Config
-	path := fmt.Sprintf("/projects/%s/configs", pathEscape(projectID))
+	path := fmt.Sprintf("/v1/projects/%s/configs", pathEscape(projectID))
 	if err := c.do(ctx, http.MethodPost, path, req, &out); err != nil {
 		return nil, err
 	}
@@ -325,7 +325,7 @@ func (c *Client) CreateConfig(ctx context.Context, projectID string, req CreateC
 
 func (c *Client) GetConfig(ctx context.Context, projectID, key string) (*Config, error) {
 	var out Config
-	path := fmt.Sprintf("/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
+	path := fmt.Sprintf("/v1/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
 	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
 		return nil, err
 	}
@@ -336,7 +336,7 @@ func (c *Client) GetConfig(ctx context.Context, projectID, key string) (*Config,
 // response body is empty on success, so it can't be used to populate the
 // returned Config directly.
 func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req UpdateConfigRequest) (*Config, error) {
-	path := fmt.Sprintf("/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
+	path := fmt.Sprintf("/v1/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
 	body := updateConfigRequest{
 		Key:         req.Key,
 		Description: req.Description,
@@ -357,7 +357,7 @@ func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req Up
 }
 
 func (c *Client) DeleteConfig(ctx context.Context, projectID, key string) error {
-	path := fmt.Sprintf("/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
+	path := fmt.Sprintf("/v1/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
 	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }
 
@@ -378,7 +378,7 @@ type UpdateConfigTargetsRequest struct {
 // parent config (GetConfig) afterward and look up the matching entry in its
 // Targets by environment ID, the same way Read works for this sub-resource.
 func (c *Client) UpdateConfigTargets(ctx context.Context, projectID, configKey string, req UpdateConfigTargetsRequest) error {
-	path := fmt.Sprintf("/projects/%s/configs/%s/targets", pathEscape(projectID), pathEscape(configKey))
+	path := fmt.Sprintf("/v1/projects/%s/configs/%s/targets", pathEscape(projectID), pathEscape(configKey))
 	body := updateConfigTargetsRequest{
 		EnvironmentID: req.EnvironmentID,
 		DefaultValue:  req.DefaultValue,
@@ -389,7 +389,7 @@ func (c *Client) UpdateConfigTargets(ctx context.Context, projectID, configKey s
 
 func (c *Client) ListConfigs(ctx context.Context, projectID string) ([]Config, error) {
 	var out []Config
-	path := fmt.Sprintf("/projects/%s/configs", pathEscape(projectID))
+	path := fmt.Sprintf("/v1/projects/%s/configs", pathEscape(projectID))
 	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
 		return nil, err
 	}

@@ -69,7 +69,7 @@ resource "configdirector_config_targeting_rules" "example_experiment_test_rules"
   project_id = configdirector_project.example.id
   config_key = configdirector_config.example_experiment.key
   environment_slug = "test"
-  default_value = "One"
+  default_value = "Two"
   rules = [
     {
       # Conditional rule: VIP test users always get "Three", regardless of

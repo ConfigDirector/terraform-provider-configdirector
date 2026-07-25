@@ -21,8 +21,8 @@ and `init` isn't needed for a single-provider config like this one. Terraform
 will print a "development overrides are in effect" warning on every run;
 that's expected.
 
-By default the provider talks to `http://localhost:3001/api/v1`. Set
-`CONFIGDIRECTOR_HOST` to point elsewhere.
+By default the provider talks to `https://api.configdirector.com`. Set
+`CONFIGDIRECTOR_BASE_URL` to point elsewhere.
 
 Run `terraform destroy` when you're done to clean up the example project,
 environment, and config.

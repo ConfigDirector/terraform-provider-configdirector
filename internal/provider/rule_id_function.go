@@ -20,15 +20,7 @@ func NewRuleIDFunction() function.Function {
 
 // RuleIDFunction backs provider::configdirector::rule_id(seed). It exists
 // because configdirector_config_targeting_rules' "rules" attribute requires
-// every rule/condition/percentage-bucket to carry a client-supplied UUID id,
-// but Terraform doesn't allow a provider to inject generated values into an
-// otherwise fully-known dynamic attribute (not even via a plan modifier, and
-// not even on first create, when there's no prior state to fall back to -
-// see the resource's docs for what was tried). A deterministic function
-// sidesteps the problem entirely: the id is just ordinary HCL content,
-// identical at plan and apply time, so there's nothing for Terraform's
-// consistency checks to catch. Callers pick any short, meaningful, stable
-// seed per rule instead of inventing/managing a real UUID themselves.
+// every rule/condition/percentage-bucket to carry a client-supplied UUID id.
 type RuleIDFunction struct{}
 
 func (f *RuleIDFunction) Metadata(ctx context.Context, req function.MetadataRequest, resp *function.MetadataResponse) {

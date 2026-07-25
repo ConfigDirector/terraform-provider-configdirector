@@ -6,8 +6,6 @@ terraform {
   }
 }
 
-# host/token are left unset here: the provider falls back to the
-# CONFIGDIRECTOR_HOST / CONFIGDIRECTOR_TOKEN environment variables.
 provider "configdirector" {}
 
 resource "configdirector_project" "terraform-import" {

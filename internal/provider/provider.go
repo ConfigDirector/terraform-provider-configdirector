@@ -14,7 +14,7 @@ import (
 	"github.com/alejandro/terraform-provider-configdirector/internal/client"
 )
 
-const defaultHost = "http://localhost:3001/api/v1"
+const defaultBaseUrl = "https://api.configdirector.com"
 
 var (
 	_ provider.Provider              = &ConfigDirectorProvider{}
@@ -26,7 +26,7 @@ type ConfigDirectorProvider struct {
 }
 
 type configDirectorProviderModel struct {
-	Host  types.String `tfsdk:"host"`
+	BaseUrl  types.String `tfsdk:"base_url"`
 	Token types.String `tfsdk:"token"`
 }
 
@@ -44,9 +44,9 @@ func (p *ConfigDirectorProvider) Metadata(ctx context.Context, req provider.Meta
 func (p *ConfigDirectorProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
-			"host": schema.StringAttribute{
+			"base_url": schema.StringAttribute{
 				Optional:    true,
-				Description: "Base URL of the ConfigDirector API, e.g. http://localhost:3001/api/v1. Defaults to the CONFIGDIRECTOR_HOST environment variable, falling back to " + defaultHost + ".",
+				Description: "Base URL of the ConfigDirector API, e.g. https://api.configdirector.com/v1. Defaults to the CONFIGDIRECTOR_BASE_URL environment variable, falling back to " + defaultBaseUrl + ".",
 			},
 			"token": schema.StringAttribute{
 				Optional:    true,
@@ -64,12 +64,12 @@ func (p *ConfigDirectorProvider) Configure(ctx context.Context, req provider.Con
 		return
 	}
 
-	host := os.Getenv("CONFIGDIRECTOR_HOST")
-	if !data.Host.IsNull() && data.Host.ValueString() != "" {
-		host = data.Host.ValueString()
+	baseUrl := os.Getenv("CONFIGDIRECTOR_BASE_URL")
+	if !data.BaseUrl.IsNull() && data.BaseUrl.ValueString() != "" {
+		baseUrl = data.BaseUrl.ValueString()
 	}
-	if host == "" {
-		host = defaultHost
+	if baseUrl == "" {
+		baseUrl = defaultBaseUrl
 	}
 
 	token := os.Getenv("CONFIGDIRECTOR_TOKEN")
@@ -84,7 +84,7 @@ func (p *ConfigDirectorProvider) Configure(ctx context.Context, req provider.Con
 		return
 	}
 
-	c := client.New(host, token)
+	c := client.New(baseUrl, token)
 	resp.ResourceData = c
 	resp.DataSourceData = c
 }
