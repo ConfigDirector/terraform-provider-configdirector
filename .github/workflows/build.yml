@@ -7,9 +7,11 @@ on:
 
 jobs:
   build:
-    name: Build
+    name: Build and Test
     runs-on: ubuntu-latest
     concurrency: build-and-test
+    permissions:
+      contents: "read"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -20,4 +22,7 @@ jobs:
         run: make build
 
       - name: Test
-        run: make test
+        run: make test_integration
+        env:
+          TF_ACC: 1
+          CONFIGDIRECTOR_TOKEN: ${{ secrets.CONFIGDIRECTOR_API_TOKEN }}

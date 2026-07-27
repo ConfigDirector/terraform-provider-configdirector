@@ -34,10 +34,14 @@ resource "configdirector_project" "test" {
 					resource.TestCheckResourceAttr("configdirector_project.test", "slug", "test-project"),
 					resource.TestCheckResourceAttrSet("configdirector_project.test", "organization_id"),
 					resource.TestCheckResourceAttr("configdirector_project.test", "environments.#", "2"),
-					resource.TestCheckResourceAttr("configdirector_project.test", "environments.0.slug", "test"),
-					resource.TestCheckResourceAttr("configdirector_project.test", "environments.0.live", "false"),
-					resource.TestCheckResourceAttr("configdirector_project.test", "environments.1.slug", "production"),
-					resource.TestCheckResourceAttr("configdirector_project.test", "environments.1.live", "true"),
+					resource.TestCheckTypeSetElemNestedAttrs("configdirector_project.test", "environments.*", map[string]string{
+						"slug": "test",
+						"live": "false",
+					}),
+					resource.TestCheckTypeSetElemNestedAttrs("configdirector_project.test", "environments.*", map[string]string{
+						"slug": "production",
+						"live": "true",
+					}),
 				),
 			},
 			{
@@ -201,7 +205,7 @@ resource "configdirector_project" "test" {
 			{
 				RefreshState: true,
 				PreConfig: func() {
-					c := client.New(os.Getenv("CONFIGDIRECTOR_BASE_URL"), os.Getenv("CONFIGDIRECTOR_TOKEN"))
+					c := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
 					if err := c.DeleteProject(context.Background(), projectID); err != nil {
 						t.Fatalf("deleting project out of band: %s", err)
 					}

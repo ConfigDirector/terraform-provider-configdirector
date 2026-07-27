@@ -26,7 +26,7 @@ type ProjectDataSourceModel struct {
 	Name           types.String `tfsdk:"name"`
 	OrganizationId types.String `tfsdk:"organization_id"`
 	Slug           types.String `tfsdk:"slug"`
-	Environments   types.List   `tfsdk:"environments"`
+	Environments   types.Set    `tfsdk:"environments"`
 }
 
 func (d *ProjectDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -43,7 +43,9 @@ func (d *ProjectDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 			"name":            schema.StringAttribute{Computed: true},
 			"organization_id": schema.StringAttribute{Computed: true},
 			"slug":            schema.StringAttribute{Computed: true},
-			"environments": schema.ListNestedAttribute{
+			// A Set, not a List: see project_resource.go's "environments"
+			// attribute for why.
+			"environments": schema.SetNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -90,12 +92,12 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	state.Slug = stringValue(project.Slug)
 	state.OrganizationId = stringValue(project.OrganizationID)
 
-	envList, diags := environmentSummaryListValue(ctx, project.Environments)
+	envSet, diags := environmentSummarySetValue(ctx, project.Environments)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	state.Environments = envList
+	state.Environments = envSet
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

@@ -71,7 +71,6 @@ func (r *EnvironmentResource) Schema(ctx context.Context, req resource.SchemaReq
 				Validators: []validator.String{
 					stringvalidator.LengthBetween(4, 150),
 				},
-				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"color": schema.StringAttribute{
 				Required: true,

@@ -77,14 +77,6 @@ func environmentSummaryModelFromAPI(e client.Environment) environmentSummaryMode
 	}
 }
 
-func environmentSummaryListValue(ctx context.Context, envs []client.Environment) (types.List, diag.Diagnostics) {
-	models := make([]environmentSummaryModel, len(envs))
-	for i, e := range envs {
-		models[i] = environmentSummaryModelFromAPI(e)
-	}
-	return types.ListValueFrom(ctx, types.ObjectType{AttrTypes: environmentSummaryAttrTypes}, models)
-}
-
 func environmentSummarySetValue(ctx context.Context, envs []client.Environment) (types.Set, diag.Diagnostics) {
 	models := make([]environmentSummaryModel, len(envs))
 	for i, e := range envs {

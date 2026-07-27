@@ -21,9 +21,10 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 //     in-memory fake of the ConfigDirector API, so `go test` works without
 //     credentials or network access.
 //   - TF_ACC set: tests run against a live ConfigDirector API.
-//     CONFIGDIRECTOR_BASE_URL and CONFIGDIRECTOR_TOKEN must already be set
-//     in the environment, e.g.:
-//     TF_ACC=1 CONFIGDIRECTOR_BASE_URL=https://... CONFIGDIRECTOR_TOKEN=... go test ./...
+//     CONFIGDIRECTOR_TOKEN must already be set in the environment.
+//     CONFIGDIRECTOR_BASE_URL is left untouched: if unset, the provider
+//     falls back to its own default (the real ConfigDirector API), e.g.:
+//     TF_ACC=1 CONFIGDIRECTOR_TOKEN=... go test ./...
 //
 // Tests still run via resource.UnitTest either way, since TF_ACC here only
 // selects the backend, not whether the test executes.
@@ -31,8 +32,8 @@ func testAccConfigure(t *testing.T) {
 	t.Helper()
 
 	if os.Getenv("TF_ACC") != "" {
-		if os.Getenv("CONFIGDIRECTOR_BASE_URL") == "" || os.Getenv("CONFIGDIRECTOR_TOKEN") == "" {
-			t.Fatal("TF_ACC is set: CONFIGDIRECTOR_BASE_URL and CONFIGDIRECTOR_TOKEN must also be set to run against a live API")
+		if os.Getenv("CONFIGDIRECTOR_TOKEN") == "" {
+			t.Fatal("TF_ACC is set: CONFIGDIRECTOR_TOKEN must also be set to run against a live API")
 		}
 		return
 	}
@@ -40,4 +41,17 @@ func testAccConfigure(t *testing.T) {
 	srv := newFakeConfigDirectorServer(t)
 	t.Setenv("CONFIGDIRECTOR_BASE_URL", srv.URL)
 	t.Setenv("CONFIGDIRECTOR_TOKEN", "test-token")
+}
+
+// testAccBaseURL returns the base URL the provider under test is actually
+// using, for tests that need to build their own *client.Client to make
+// out-of-band API calls (e.g. deleting a resource behind Terraform's back).
+// CONFIGDIRECTOR_BASE_URL is deliberately left unset for live runs (see
+// testAccConfigure), so this mirrors the same fallback the provider itself
+// applies in Configure, rather than assuming the env var is always set.
+func testAccBaseURL() string {
+	if v := os.Getenv("CONFIGDIRECTOR_BASE_URL"); v != "" {
+		return v
+	}
+	return defaultBaseUrl
 }

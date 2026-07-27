@@ -36,7 +36,7 @@ type ProjectModel struct {
 	Name           types.String `tfsdk:"name"`
 	OrganizationId types.String `tfsdk:"organization_id"`
 	Slug           types.String `tfsdk:"slug"`
-	Environments   types.List   `tfsdk:"environments"`
+	Environments   types.Set    `tfsdk:"environments"`
 }
 
 func (r *ProjectResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -71,7 +71,7 @@ func (r *ProjectResource) Schema(ctx context.Context, req resource.SchemaRequest
 					stringvalidator.RegexMatches(regexp.MustCompile(`^[\da-z]+(?:[-_][\da-z]+)*$`), ""),
 				},
 			},
-			"environments": schema.ListNestedAttribute{
+			"environments": schema.SetNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -106,11 +106,11 @@ func projectToModel(ctx context.Context, p *client.Project, m *ProjectModel) err
 	m.Slug = stringValue(p.Slug)
 	m.OrganizationId = stringValue(p.OrganizationID)
 
-	envList, diags := environmentSummaryListValue(ctx, p.Environments)
+	envSet, diags := environmentSummarySetValue(ctx, p.Environments)
 	if diags.HasError() {
 		return fmt.Errorf("%v", diags)
 	}
-	m.Environments = envList
+	m.Environments = envSet
 	return nil
 }
 
