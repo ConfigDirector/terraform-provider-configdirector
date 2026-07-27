@@ -1,15 +1,28 @@
 # Examples
 
-Each subdirectory here is a self-contained, runnable example for one
-resource:
+This directory follows the standard [terraform-plugin-docs](https://github.com/hashicorp/terraform-plugin-docs)
+layout, which also doubles as documentation source: each `.tf` file here can
+get pulled directly into the generated provider docs.
 
-- [project/](project/main.tf) - `configdirector_project`
-- [environment/](environment/main.tf) - `configdirector_environment`
-- [config/](config/main.tf) - `configdirector_config`, showing several
-  role/type/type_options combinations
-- [config_targeting_rules/](config_targeting_rules/main.tf) -
-  `configdirector_config_targeting_rules`, showing multiple configs each
-  with conditional and percentage-based targeting rules across environments
+- [provider/provider.tf](provider/provider.tf) - configuring the provider
+  itself
+- `resources/<resource_type>/resource.tf` - one directory per resource, each
+  a self-contained, runnable example:
+  - [configdirector_project](resources/configdirector_project/resource.tf)
+  - [configdirector_environment](resources/configdirector_environment/resource.tf)
+  - [configdirector_config](resources/configdirector_config/resource.tf) -
+    several role/type/type_options combinations
+  - [configdirector_config_targeting_rules](resources/configdirector_config_targeting_rules/resource.tf) -
+    multiple configs, each with conditional and percentage-based targeting
+    rules across environments
+- `data-sources/<data_source_type>/data-source.tf` - one directory per data
+  source, each creating whatever resource(s) it needs to look up:
+  - [configdirector_project](data-sources/configdirector_project/data-source.tf)
+  - [configdirector_projects](data-sources/configdirector_projects/data-source.tf)
+  - [configdirector_environment](data-sources/configdirector_environment/data-source.tf)
+  - [configdirector_environments](data-sources/configdirector_environments/data-source.tf)
+  - [configdirector_config](data-sources/configdirector_config/data-source.tf)
+  - [configdirector_configs](data-sources/configdirector_configs/data-source.tf)
 
 This provider isn't published to the Terraform registry, so Terraform needs
 to be pointed at a locally-built binary via [dev overrides](https://developer.hashicorp.com/terraform/plugin/debugging#terraform-cli-development-overrides)
@@ -22,7 +35,7 @@ make build
 export CONFIGDIRECTOR_TOKEN=<your api token>
 export TF_CLI_CONFIG_FILE="$PWD/examples/dev.tfrc"
 
-cd examples/<resource>
+cd examples/resources/<resource_type>   # or data-sources/<data_source_type>, or provider
 terraform plan
 terraform apply
 ```
