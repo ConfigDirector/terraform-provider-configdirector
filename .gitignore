@@ -2,6 +2,7 @@
 .claude
 terraform-provider-configdirector
 bin/
+scratchpad/
 *.tfstate
 *.tfstate.*
 .terraform/
