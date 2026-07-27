@@ -26,9 +26,8 @@ resource "configdirector_config" "test" {
 `
 
 func TestAccConfigTargetingRulesResource_createAndImport(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -97,9 +96,8 @@ resource "configdirector_config_targeting_rules" "test" {
 // itself is write-only and never reconciled, so it can't be verified the
 // same way - see the schema description).
 func TestAccConfigTargetingRulesResource_updatesInPlace(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -140,9 +138,8 @@ resource "configdirector_config_targeting_rules" "test" {
 // environment, so switching environments is a different resource, not an
 // update to this one.
 func TestAccConfigTargetingRulesResource_environmentChangeForcesReplacement(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -183,11 +180,10 @@ resource "configdirector_config_targeting_rules" "test" {
 // (see targetingRulesToModel) - deleting the parent config out of band
 // should drop this resource from state too.
 func TestAccConfigTargetingRulesResource_deletedOutOfBand(t *testing.T) {
-	testAccConfigure(t)
-
 	var projectID, configKey string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -236,9 +232,8 @@ resource "configdirector_config_targeting_rules" "test" {
 // be unique across the whole rules value. This fails during plan, before
 // any API call is made.
 func TestAccConfigTargetingRulesResource_duplicateRuleIds(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{

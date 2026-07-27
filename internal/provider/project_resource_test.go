@@ -16,9 +16,8 @@ import (
 )
 
 func TestAccProjectResource_createAndImport(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -57,9 +56,8 @@ resource "configdirector_project" "test" {
 // path: the project's slug, not just its id (see project_resource.go's
 // ImportState, which falls back to a ListProjects scan for slugs).
 func TestAccProjectResource_importBySlug(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -87,11 +85,10 @@ resource "configdirector_project" "test" {
 }
 
 func TestAccProjectResource_renameUpdatesInPlace(t *testing.T) {
-	testAccConfigure(t)
-
 	var idBeforeUpdate string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -133,11 +130,10 @@ resource "configdirector_project" "test" {
 }
 
 func TestAccProjectResource_slugChangeUpdatesInPlace(t *testing.T) {
-	testAccConfigure(t)
-
 	var idBeforeUpdate string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -183,11 +179,10 @@ resource "configdirector_project" "test" {
 // should drop it from state (rather than erroring), leaving a plan that
 // wants to create it again.
 func TestAccProjectResource_deletedOutOfBand(t *testing.T) {
-	testAccConfigure(t)
-
 	var projectID string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -224,8 +219,6 @@ resource "configdirector_project" "test" {
 // TestAccProjectResource_validation covers the schema-level validators on
 // name/slug. These fail during plan, before any API call is made.
 func TestAccProjectResource_validation(t *testing.T) {
-	testAccConfigure(t)
-
 	testCases := map[string]struct {
 		config      string
 		expectError string
@@ -261,7 +254,8 @@ resource "configdirector_project" "test" {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			resource.UnitTest(t, resource.TestCase{
+			resource.Test(t, resource.TestCase{
+				PreCheck:                 func() { testAccPreCheck(t) },
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 				Steps: []resource.TestStep{
 					{

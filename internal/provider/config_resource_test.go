@@ -22,9 +22,8 @@ resource "configdirector_project" "test" {
 `
 
 func TestAccConfigResource_createAndImport(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -76,11 +75,10 @@ resource "configdirector_config" "test" {
 // framework's automatic post-apply refresh+plan confirms the change was
 // actually persisted through the API.
 func TestAccConfigResource_updatesInPlace(t *testing.T) {
-	testAccConfigure(t)
-
 	var idBeforeUpdate string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -139,9 +137,8 @@ resource "configdirector_config" "test" {
 // RequiresReplace plan modifier on project_id: the API has no way to move a
 // config between projects.
 func TestAccConfigResource_projectIdChangeForcesReplacement(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -205,9 +202,8 @@ resource "configdirector_config" "test" {
 // Changing it afterward keeps showing a pending plan (it's never reconciled
 // away) but never reaches the API.
 func TestAccConfigResource_initialValueIgnoredAfterCreate(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -243,11 +239,10 @@ resource "configdirector_config" "test" {
 // when a config has been deleted outside of Terraform, refreshing state
 // should drop it from state, leaving a plan that wants to create it again.
 func TestAccConfigResource_deletedOutOfBand(t *testing.T) {
-	testAccConfigure(t)
-
 	var projectID, key string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -296,8 +291,6 @@ resource "configdirector_config" "test" {
 // requiring role "experiment" for variations. These fail during plan,
 // before any API call is made.
 func TestAccConfigResource_validation(t *testing.T) {
-	testAccConfigure(t)
-
 	testCases := map[string]struct {
 		config      string
 		expectError string
@@ -372,7 +365,8 @@ resource "configdirector_config" "test" {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			resource.UnitTest(t, resource.TestCase{
+			resource.Test(t, resource.TestCase{
+				PreCheck:                 func() { testAccPreCheck(t) },
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 				Steps: []resource.TestStep{
 					{

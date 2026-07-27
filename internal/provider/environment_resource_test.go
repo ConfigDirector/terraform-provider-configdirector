@@ -23,9 +23,8 @@ resource "configdirector_project" "test" {
 `
 
 func TestAccEnvironmentResource_createAndImport(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -67,9 +66,8 @@ resource "configdirector_environment" "test" {
 // lookup path: project_id/slug, not just project_id/id (see
 // environment_resource.go's ImportState).
 func TestAccEnvironmentResource_importBySlug(t *testing.T) {
-	testAccConfigure(t)
-
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -106,11 +104,10 @@ resource "configdirector_environment" "test" {
 // it's a true update; the framework's automatic post-apply refresh+plan
 // confirms the change was actually persisted through the API.
 func TestAccEnvironmentResource_updatesInPlace(t *testing.T) {
-	testAccConfigure(t)
-
 	var idBeforeUpdate string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -160,11 +157,10 @@ resource "configdirector_environment" "test" {
 }
 
 func TestAccEnvironmentResource_slugChangeUpdatesInPlace(t *testing.T) {
-	testAccConfigure(t)
-
 	var idBeforeUpdate string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -216,11 +212,10 @@ resource "configdirector_environment" "test" {
 // refreshing state should drop it from state, leaving a plan that wants to
 // create it again.
 func TestAccEnvironmentResource_deletedOutOfBand(t *testing.T) {
-	testAccConfigure(t)
-
 	var projectID, environmentID string
 
-	resource.UnitTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -266,8 +261,6 @@ resource "configdirector_environment" "test" {
 // TestAccEnvironmentResource_validation covers the schema-level validators
 // on name/slug/color. These fail during plan, before any API call is made.
 func TestAccEnvironmentResource_validation(t *testing.T) {
-	testAccConfigure(t)
-
 	testCases := map[string]struct {
 		config      string
 		expectError string
@@ -312,7 +305,8 @@ resource "configdirector_environment" "test" {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			resource.UnitTest(t, resource.TestCase{
+			resource.Test(t, resource.TestCase{
+				PreCheck:                 func() { testAccPreCheck(t) },
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 				Steps: []resource.TestStep{
 					{

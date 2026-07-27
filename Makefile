@@ -6,8 +6,5 @@ build:
 vet:
 	go vet ./internal/...
 
-test:
-	go test ./internal/... -v
-
 test_integration:
 	TF_ACC=1 go test ./internal/... -v
