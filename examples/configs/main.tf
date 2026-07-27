@@ -59,6 +59,9 @@ resource "configdirector_config" "example_experiment" {
     },
     {
       value = "Three"
+    },
+    {
+      value = "Four"
     }
   ]
 
@@ -110,7 +113,7 @@ resource "configdirector_config_targeting_rules" "example_experiment_test_rules"
         {
           id         = provider::configdirector::rule_id("example-experiment-test-rollout-three")
           percentage = 20
-          value      = "Three"
+          value      = "Four"
         },
       ]
     },

@@ -35,6 +35,7 @@ resource "configdirector_project" "test" {
 					resource.TestCheckResourceAttrSet("configdirector_project.test", "organization_id"),
 					resource.TestCheckResourceAttr("configdirector_project.test", "environments.#", "2"),
 					resource.TestCheckResourceAttr("configdirector_project.test", "environments.0.slug", "test"),
+					resource.TestCheckResourceAttr("configdirector_project.test", "environments.0.live", "false"),
 					resource.TestCheckResourceAttr("configdirector_project.test", "environments.1.slug", "production"),
 					resource.TestCheckResourceAttr("configdirector_project.test", "environments.1.live", "true"),
 				),

@@ -50,6 +50,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		return fmt.Errorf("building request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-SourceClient", "terraform")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
