@@ -23,6 +23,9 @@ get pulled directly into the generated provider docs.
   - [configdirector_environments](data-sources/configdirector_environments/data-source.tf)
   - [configdirector_config](data-sources/configdirector_config/data-source.tf)
   - [configdirector_configs](data-sources/configdirector_configs/data-source.tf)
+- `functions/<function_name>/function.tf` - one directory per
+  provider-defined function:
+  - [rule_id](functions/rule_id/function.tf)
 
 This provider isn't published to the Terraform registry, so Terraform needs
 to be pointed at a locally-built binary via [dev overrides](https://developer.hashicorp.com/terraform/plugin/debugging#terraform-cli-development-overrides)
