@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/alejandro/terraform-provider-configdirector/internal/client"
+	"github.com/ConfigDirector/terraform-provider-configdirector/internal/client"
 )
 
 const configTestProjectConfig = `

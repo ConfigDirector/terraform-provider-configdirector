@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     configdirector = {
-      source = "registry.terraform.io/alejandro/configdirector"
+      source = "registry.terraform.io/ConfigDirector/configdirector"
     }
   }
 }

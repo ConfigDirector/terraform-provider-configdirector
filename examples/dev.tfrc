@@ -2,7 +2,7 @@
 # registry (this provider isn't published). See examples/README.md.
 provider_installation {
   dev_overrides {
-    "registry.terraform.io/alejandro/configdirector" = "/Users/alejandro/Projects/ConfigDirector/terraform-provider-configdirector/bin"
+    "registry.terraform.io/ConfigDirector/configdirector" = "/Users/alejandro/Projects/ConfigDirector/terraform-provider-configdirector/bin"
   }
   direct {}
 }

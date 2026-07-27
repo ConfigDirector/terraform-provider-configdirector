@@ -1,4 +1,4 @@
-module github.com/alejandro/terraform-provider-configdirector
+module github.com/ConfigDirector/terraform-provider-configdirector
 
 go 1.26.5
 

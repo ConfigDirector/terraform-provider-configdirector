@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/alejandro/terraform-provider-configdirector/internal/client"
+	"github.com/ConfigDirector/terraform-provider-configdirector/internal/client"
 )
 
 func stringValue(s string) types.String {

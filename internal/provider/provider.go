@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/alejandro/terraform-provider-configdirector/internal/client"
+	"github.com/ConfigDirector/terraform-provider-configdirector/internal/client"
 )
 
 const defaultBaseUrl = "https://api.configdirector.com"
@@ -26,8 +26,8 @@ type ConfigDirectorProvider struct {
 }
 
 type configDirectorProviderModel struct {
-	BaseUrl  types.String `tfsdk:"base_url"`
-	Token types.String `tfsdk:"token"`
+	BaseUrl types.String `tfsdk:"base_url"`
+	Token   types.String `tfsdk:"token"`
 }
 
 func New(version string) func() provider.Provider {
