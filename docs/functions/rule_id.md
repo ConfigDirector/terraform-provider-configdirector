@@ -16,7 +16,8 @@ Returns a deterministic UUID derived from the given seed string: the same seed a
 terraform {
   required_providers {
     configdirector = {
-      source = "registry.terraform.io/ConfigDirector/configdirector"
+      source  = "registry.terraform.io/ConfigDirector/configdirector"
+      version = "~> 0.1"
     }
   }
 }
