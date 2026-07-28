@@ -27,29 +27,41 @@ get pulled directly into the generated provider docs.
   provider-defined function:
   - [rule_id](functions/rule_id/function.tf)
 
-This provider isn't published to the Terraform registry, so Terraform needs
-to be pointed at a locally-built binary via [dev overrides](https://developer.hashicorp.com/terraform/plugin/debugging#terraform-cli-development-overrides)
-instead of running `terraform init`.
-
-From the repo root:
+The provider is published at [registry.terraform.io/ConfigDirector/configdirector](https://registry.terraform.io/providers/ConfigDirector/configdirector),
+so each example installs normally:
 
 ```sh
-make build
 export CONFIGDIRECTOR_TOKEN=<your api token>
-export TF_CLI_CONFIG_FILE="$PWD/examples/dev.tfrc"
 
-cd examples/resources/<resource_type>   # or data-sources/<data_source_type>, or provider
+cd examples/resources/<resource_type>   # or data-sources/<data_source_type>, functions/<function_name>, or provider
+terraform init
 terraform plan
 terraform apply
 ```
-
-Skip `terraform init` - dev overrides bypass provider installation entirely,
-and `init` isn't needed for these single-provider configs. Terraform will
-print a "development overrides are in effect" warning on every run; that's
-expected.
 
 By default the provider talks to `https://api.configdirector.com`. Set
 `CONFIGDIRECTOR_BASE_URL` to point elsewhere.
 
 Run `terraform destroy` when you're done with an example to clean up the
 project (and everything under it) it created.
+
+## Testing against a local, unreleased build
+
+To run an example against a locally-built binary instead of the published
+release (e.g. to try out an unreleased change before tagging), point
+Terraform at it via [dev overrides](https://developer.hashicorp.com/terraform/plugin/debugging#terraform-cli-development-overrides):
+
+```sh
+make build
+export CONFIGDIRECTOR_TOKEN=<your api token>
+export TF_CLI_CONFIG_FILE="$PWD/examples/dev.tfrc"
+
+cd examples/resources/<resource_type>
+terraform plan   # no `terraform init` - dev overrides bypass it entirely
+terraform apply
+```
+
+Terraform will print a "development overrides are in effect" warning on
+every run; that's expected. The version constraint in each example's
+`required_providers` block is ignored under dev overrides, so this works
+regardless of what's published.

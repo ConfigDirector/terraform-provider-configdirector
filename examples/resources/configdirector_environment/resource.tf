@@ -1,7 +1,8 @@
 terraform {
   required_providers {
     configdirector = {
-      source = "registry.terraform.io/ConfigDirector/configdirector"
+      source  = "registry.terraform.io/ConfigDirector/configdirector"
+      version = "~> 0.1"
     }
   }
 }
