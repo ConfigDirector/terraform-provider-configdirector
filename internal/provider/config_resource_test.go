@@ -69,6 +69,83 @@ resource "configdirector_config" "test" {
 	})
 }
 
+// TestAccConfigResource_planAfterImport reproduces a "Provider produced
+// invalid plan" crash: import leaves initial_value null in state (the API
+// never returns a config's default value back), but ignoreUpdatesAfterCreate
+// unconditionally pins the plan to whatever's in state once state exists -
+// including that null - which conflicts with a non-null configured value on
+// this Required attribute.
+//
+// The project/config are created directly via the client (not a prior
+// apply step) so that ImportStatePersist's first step is a clean import
+// into empty state: importing into an address Terraform already manages
+// fails outright ("Resource already managed by Terraform"), and the
+// state-stripping that would otherwise allow re-importing over prior state
+// only exists for the newer plannable (import block) mode, which forbids
+// ImportStatePersist entirely.
+func TestAccConfigResource_planAfterImport(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("Acceptance tests skipped unless env 'TF_ACC' set")
+	}
+	testAccPreCheck(t)
+
+	ctx := context.Background()
+	c := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
+
+	project, err := c.CreateProject(ctx, client.CreateProjectRequest{Name: "Test Project", Slug: "test-project"})
+	if err != nil {
+		t.Fatalf("creating project: %s", err)
+	}
+	t.Cleanup(func() {
+		if err := c.DeleteProject(ctx, project.ID); err != nil {
+			t.Logf("cleaning up project %s: %s", project.ID, err)
+		}
+	})
+
+	defaultValue := true
+	if _, err := c.CreateConfig(ctx, project.ID, client.CreateConfigRequest{
+		Key:          "test-flag-key",
+		Role:         "flag",
+		Lifetime:     "temporary",
+		Type:         "boolean",
+		DefaultValue: defaultValue,
+	}); err != nil {
+		t.Fatalf("creating config: %s", err)
+	}
+
+	config := fmt.Sprintf(`
+resource "configdirector_config" "test" {
+  project_id    = %q
+  key           = "test-flag-key"
+  role          = "flag"
+  lifetime      = "temporary"
+  type          = "boolean"
+  initial_value = true
+}
+`, project.ID)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				ResourceName:       "configdirector_config.test",
+				ImportState:        true,
+				ImportStatePersist: true,
+				ImportStateId:      project.ID + "/test-flag-key",
+			},
+			{
+				// The fixed behavior: initial_value was null in state after
+				// import (nothing to pin to), so the plan modifier should let
+				// the configured value flow through and adopt it as the new
+				// baseline - not crash, and not require a second apply.
+				Config: config,
+				Check:  resource.TestCheckResourceAttr("configdirector_config.test", "initial_value", "true"),
+			},
+		},
+	})
+}
+
 // TestAccConfigResource_updatesInPlace verifies that description/client/
 // server changes update the config in place via the API (PATCH), not a
 // replace. The id staying constant confirms it's a true update; the

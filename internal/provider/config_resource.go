@@ -172,7 +172,9 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					"no-op API call) on every plan/apply for as long as the configured value disagrees with the " +
 					"pinned one. Add `lifecycle { ignore_changes = [initial_value] }` on the resource to " +
 					"suppress that too. Ongoing default value changes go through per-environment targeting rules " +
-					"instead, which aren't modeled by this resource yet.",
+					"instead, which aren't modeled by this resource yet. Exception: right after import, there's " +
+					"nothing yet to pin to (import can't populate this attribute either - see ImportState), so the " +
+					"first apply adopts whatever's configured as the new baseline instead of conflicting with it.",
 				PlanModifiers: []planmodifier.Dynamic{ignoreUpdatesAfterCreate{}},
 			},
 		},
@@ -233,8 +235,17 @@ func (m ignoreUpdatesAfterCreate) MarkdownDescription(ctx context.Context) strin
 
 func (m ignoreUpdatesAfterCreate) PlanModifyDynamic(ctx context.Context, req planmodifier.DynamicRequest, resp *planmodifier.DynamicResponse) {
 	// req.State.Raw is null only when there's no prior state yet, i.e. this
-	// is a Create - let the configured value flow through untouched.
-	if req.State.Raw.IsNull() {
+	// is a Create - let the configured value flow through untouched. The
+	// same applies when prior state exists but this specific attribute is
+	// null within it: since it's Required, that's only possible after
+	// import (the API never returns a config's default value, so
+	// ImportState can't populate it - see its schema description). Pinning
+	// a null onto a non-null configured value here would conflict with the
+	// config on this Required attribute, which is a harder inconsistency
+	// than same-typed-value drift and trips Terraform's "Provider produced
+	// invalid plan" check. Letting the configured value through instead
+	// adopts it as the new baseline on the first post-import apply.
+	if req.State.Raw.IsNull() || req.StateValue.IsNull() {
 		return
 	}
 	resp.PlanValue = req.StateValue
@@ -443,8 +454,9 @@ func (r *ConfigResource) ImportState(ctx context.Context, req resource.ImportSta
 	resp.Diagnostics.AddWarning(
 		"initial_value Not Imported",
 		"The ConfigDirector API does not return a config's default value, so initial_value cannot be "+
-			"populated by import - it will read as unset. Because changes to it are always ignored once a config "+
-			"exists (see the attribute's description), there's no follow-up apply that can set it after the fact; "+
-			"if you need it populated, recreate the resource (e.g. taint it) instead.",
+			"populated by import - it will read as unset. The next apply will adopt whatever's configured as the "+
+			"new baseline (see the attribute's description) rather than actually changing anything remotely, "+
+			"since the API still has no endpoint to set it after creation - so make sure it's set to the value "+
+			"you actually want treated as the baseline going forward before that apply runs.",
 	)
 }
