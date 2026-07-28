@@ -27,8 +27,24 @@ get pulled directly into the generated provider docs.
   provider-defined function:
   - [rule_id](functions/rule_id/function.tf)
 
+Every resource above also has, alongside its `resource.tf`, two files documenting `terraform import` for it:
+
+- `import.sh` - the [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import),
+  showing the exact composite ID format that resource expects (several of these IDs are `/`-joined composites, e.g.
+  `<project_id>/<key>` for `configdirector_config` - see each file's comments for the exact shape and any caveats,
+  like which attributes can't be recovered by import at all)
+- `import-by-string-id.tf` - the same import, as a Terraform >= 1.5
+  [`import` block](https://developer.hashicorp.com/terraform/language/import)
+
+Both are documentation snippets - `tfplugindocs` picks them up automatically and renders them into each resource's
+"Import" doc section, matching every other provider's `examples/resources/` layout - **not runnable configuration**.
+This matters because Terraform merges every `.tf` file in a directory: **`terraform apply` will fail** in any
+`resources/<resource_type>/` directory as long as `import-by-string-id.tf` is present, since it tries to import
+before `resource.tf` has created anything to import. Delete or move that one file out of the way first if you want
+to actually run `resource.tf` (see below); `import.sh` is inert since Terraform doesn't parse `.sh` files.
+
 The provider is published at [registry.terraform.io/ConfigDirector/configdirector](https://registry.terraform.io/providers/ConfigDirector/configdirector),
-so each example installs normally:
+so every other example (and `resource.tf` files once `import-by-string-id.tf` is out of the way) installs normally:
 
 ```sh
 export CONFIGDIRECTOR_TOKEN=<your api token>

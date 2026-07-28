@@ -193,3 +193,29 @@ resource "configdirector_config_targeting_rules" "checkout_button_copy_productio
 - `environment_id` (String)
 - `environment_slug` (String)
 - `rules` (Dynamic) Targeting rules for this environment, as a list of rule objects (conditional or percentage-based, matching the API's shape). Not validated by Terraform beyond structure - passed through as-is and validated by the API. Every rule/condition/percentage-bucket needs an "id" (the API requires it, and Terraform has no way for this provider to generate one itself - see RuleIDFunction/rule_id_function.go for why): use the provider::configdirector::rule_id("some-stable-name") function rather than typing a UUID by hand, and give each rule/condition/percentage-bucket its own distinct seed - ids must be unique across the entire value (rule ids, condition ids, and percentage-bucket ids all share one namespace, including across different rules). Write-only: the API embeds extra generated fields (e.g. valueId) into whatever you write, so unlike most attributes this is never reconciled against a subsequent read - external changes to targeting rules won't show up as drift.
+
+## Import
+
+Import is supported using the following syntax:
+
+In Terraform v1.5.0 and later, the [`import` block](https://developer.hashicorp.com/terraform/language/import) can be used with the `id` attribute, for example:
+
+```terraform
+# Note: rules can't be recovered by import - see import.sh for why.
+import {
+  to = configdirector_config_targeting_rules.beta_features_test
+  id = "0198c1b2-3a4b-7c1d-8e2f-1a2b3c4d5e6f/beta-features/test"
+}
+```
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# <project_id>/<config_key>/<environment_id_or_slug> - the environment can
+# be identified by its UUID or its slug.
+#
+# Note: rules can't be recovered by import - it's write-only and never
+# reconciled against a read. It reads as unset after import, and the first 
+# apply following import adopts whatever's configured as the new baseline.
+terraform import configdirector_config_targeting_rules.beta_features_test 0198c1b2-3a4b-7c1d-8e2f-1a2b3c4d5e6f/beta-features/test
+```

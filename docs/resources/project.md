@@ -68,3 +68,23 @@ Read-Only:
 - `name` (String)
 - `project_id` (String)
 - `slug` (String)
+
+## Import
+
+Import is supported using the following syntax:
+
+In Terraform v1.5.0 and later, the [`import` block](https://developer.hashicorp.com/terraform/language/import) can be used with the `id` attribute, for example:
+
+```terraform
+import {
+  to = configdirector_project.example
+  id = "project-example"
+}
+```
+
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
+```shell
+# The import ID can be either the project's UUID or its slug.
+terraform import configdirector_project.example project-example
+```
