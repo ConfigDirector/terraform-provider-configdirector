@@ -146,6 +146,44 @@ resource "configdirector_config" "test" {
 	})
 }
 
+// TestAccConfigResource_importByProjectSlug covers using the project's
+// slug (not just its id) as the first segment of the import ID - mirroring
+// configdirector_project's own ImportState, which resolves a slug via the
+// project list since there's no get-by-slug endpoint.
+func TestAccConfigResource_importByProjectSlug(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: configTestProjectConfig + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-flag-key"
+  role          = "flag"
+  lifetime      = "temporary"
+  type          = "boolean"
+  initial_value = true
+}
+`,
+			},
+			{
+				ResourceName:            "configdirector_config.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"initial_value"},
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["configdirector_config.test"]
+					if !ok {
+						return "", nil
+					}
+					return fmt.Sprintf("%s/%s", "test-project", rs.Primary.Attributes["key"]), nil
+				},
+			},
+		},
+	})
+}
+
 // TestAccConfigResource_updatesInPlace verifies that description/client/
 // server changes update the config in place via the API (PATCH), not a
 // replace. The id staying constant confirms it's a true update; the

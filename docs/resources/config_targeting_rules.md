@@ -204,18 +204,18 @@ In Terraform v1.5.0 and later, the [`import` block](https://developer.hashicorp.
 # Note: rules can't be recovered by import - see import.sh for why.
 import {
   to = configdirector_config_targeting_rules.beta_features_test
-  id = "0198c1b2-3a4b-7c1d-8e2f-1a2b3c4d5e6f/beta-features/test"
+  id = "targeting-rules-example/beta-features/test"
 }
 ```
 
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# <project_id>/<config_key>/<environment_id_or_slug> - the environment can
-# be identified by its UUID or its slug.
+# <project_id_or_slug>/<config_key>/<environment_id_or_slug> - the project
+# and the environment can each be identified by their UUID or their slug.
 #
 # Note: rules can't be recovered by import - it's write-only and never
-# reconciled against a read. It reads as unset after import, and the first 
+# reconciled against a read. It reads as unset after import, and the first
 # apply following import adopts whatever's configured as the new baseline.
-terraform import configdirector_config_targeting_rules.beta_features_test 0198c1b2-3a4b-7c1d-8e2f-1a2b3c4d5e6f/beta-features/test
+terraform import configdirector_config_targeting_rules.beta_features_test targeting-rules-example/beta-features/test
 ```

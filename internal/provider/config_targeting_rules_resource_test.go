@@ -89,6 +89,44 @@ resource "configdirector_config_targeting_rules" "test" {
 	})
 }
 
+// TestAccConfigTargetingRulesResource_importByProjectSlug covers using the
+// project's slug (not just its id) as the first segment of the import ID -
+// mirroring configdirector_project's own ImportState, which resolves a
+// slug via the project list since there's no get-by-slug endpoint.
+func TestAccConfigTargetingRulesResource_importByProjectSlug(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: targetingRulesTestConfigConfig + `
+resource "configdirector_config_targeting_rules" "test" {
+  project_id       = configdirector_project.test.id
+  config_key       = configdirector_config.test.key
+  environment_slug = "test"
+  default_value    = "true"
+  rules            = []
+}
+`,
+			},
+			{
+				ResourceName:                         "configdirector_config_targeting_rules.test",
+				ImportState:                          true,
+				ImportStateVerifyIdentifierAttribute: "environment_id",
+				ImportStateVerify:                    true,
+				ImportStateVerifyIgnore:              []string{"rules"},
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["configdirector_config_targeting_rules.test"]
+					if !ok {
+						return "", nil
+					}
+					return fmt.Sprintf("%s/%s/%s", "test-project", rs.Primary.Attributes["config_key"], rs.Primary.Attributes["environment_slug"]), nil
+				},
+			},
+		},
+	})
+}
+
 // TestAccConfigTargetingRulesResource_planAfterImport checks for the same
 // class of bug fixed in configdirector_config's initial_value (see
 // TestAccConfigResource_planAfterImport): default_value/rules aren't fully

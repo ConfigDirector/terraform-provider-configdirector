@@ -193,20 +193,28 @@ func (r *EnvironmentResource) Delete(ctx context.Context, req resource.DeleteReq
 	}
 }
 
-// ImportState accepts project_id/environment_id or project_id/slug. Slug
-// support exists so environments the API auto-creates for a new project
-// (e.g. "test", "production") can be adopted via an import block without
-// first having to look up their generated UUID.
+// ImportState accepts project_id_or_slug/environment_id_or_slug. Both
+// halves accept either form: the project, via resolveProjectID (there's no
+// get-by-slug endpoint); the environment, so environments the API
+// auto-creates for a new project (e.g. "test", "production") can be
+// adopted via an import block without first having to look up their
+// generated UUID.
 func (r *EnvironmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts := strings.SplitN(req.ID, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		resp.Diagnostics.AddError(
 			"Unexpected Import Identifier",
-			fmt.Sprintf("Expected import identifier with format: project_id/environment_id_or_slug. Got: %q", req.ID),
+			fmt.Sprintf("Expected import identifier with format: project_id_or_slug/environment_id_or_slug. Got: %q", req.ID),
 		)
 		return
 	}
-	projectID, identifier := parts[0], parts[1]
+	identifier := parts[1]
+
+	projectID, err := resolveProjectID(ctx, r.client, parts[0])
+	if err != nil {
+		resp.Diagnostics.AddError("Error Resolving Project", err.Error())
+		return
+	}
 
 	envs, err := r.client.ListEnvironments(ctx, projectID)
 	if err != nil {

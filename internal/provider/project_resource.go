@@ -209,28 +209,30 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 }
 
-// ImportState accepts either the project's id or its slug. Read() always
-// looks projects up by id, so a slug identifier is resolved to an id here
-// via the project list (there's no get-by-slug endpoint).
-func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	projects, err := r.client.ListProjects(ctx)
+// resolveProjectID resolves a project identifier that may be either its id
+// or its slug to its id. There's no get-by-slug endpoint, so a slug is
+// resolved by scanning the project list. Shared by every other resource's
+// ImportState whose import ID embeds a project identifier as one segment
+// of a composite id (environment, config, config_targeting_rules), so
+// slug support isn't exclusive to configdirector_project's own import.
+func resolveProjectID(ctx context.Context, c *client.Client, identifier string) (string, error) {
+	projects, err := c.ListProjects(ctx)
 	if err != nil {
-		resp.Diagnostics.AddError("Error Listing Projects", err.Error())
-		return
+		return "", err
 	}
-
-	var projectID string
 	for _, p := range projects {
-		if p.ID == req.ID || p.Slug == req.ID {
-			projectID = p.ID
-			break
+		if p.ID == identifier || p.Slug == identifier {
+			return p.ID, nil
 		}
 	}
-	if projectID == "" {
-		resp.Diagnostics.AddError(
-			"Project Not Found",
-			fmt.Sprintf("No project with id or slug %q was found.", req.ID),
-		)
+	return "", fmt.Errorf("no project with id or slug %q was found", identifier)
+}
+
+// ImportState accepts either the project's id or its slug.
+func (r *ProjectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	projectID, err := resolveProjectID(ctx, r.client, req.ID)
+	if err != nil {
+		resp.Diagnostics.AddError("Error Resolving Project", err.Error())
 		return
 	}
 

@@ -407,17 +407,26 @@ func (r *ConfigTargetingRulesResource) Delete(ctx context.Context, req resource.
 	}
 }
 
-// ImportState accepts project_id/config_key/environment_id_or_slug.
+// ImportState accepts
+// project_id_or_slug/config_key/environment_id_or_slug. The project
+// segment accepts either form via resolveProjectID (there's no
+// get-by-slug endpoint).
 func (r *ConfigTargetingRulesResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts := strings.SplitN(req.ID, "/", 3)
 	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		resp.Diagnostics.AddError(
 			"Unexpected Import Identifier",
-			fmt.Sprintf("Expected import identifier with format: project_id/config_key/environment_id_or_slug. Got: %q", req.ID),
+			fmt.Sprintf("Expected import identifier with format: project_id_or_slug/config_key/environment_id_or_slug. Got: %q", req.ID),
 		)
 		return
 	}
-	projectID, configKey, envIdentifier := parts[0], parts[1], parts[2]
+	configKey, envIdentifier := parts[1], parts[2]
+
+	projectID, err := resolveProjectID(ctx, r.client, parts[0])
+	if err != nil {
+		resp.Diagnostics.AddError("Error Resolving Project", err.Error())
+		return
+	}
 
 	environmentID, _, err := resolveEnvironment(ctx, r.client, projectID, types.StringNull(), types.StringValue(envIdentifier))
 	if err != nil {

@@ -97,6 +97,42 @@ resource "configdirector_environment" "test" {
 	})
 }
 
+// TestAccEnvironmentResource_importByProjectSlug covers using the
+// project's slug (not just its id) as the first segment of the import ID -
+// mirroring configdirector_project's own ImportState, which resolves a
+// slug via the project list since there's no get-by-slug endpoint.
+func TestAccEnvironmentResource_importByProjectSlug(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: environmentTestProjectConfig + `
+resource "configdirector_environment" "test" {
+  project_id = configdirector_project.test.id
+  name       = "Staging"
+  slug       = "staging-env"
+  color      = "blue"
+  live       = false
+}
+`,
+			},
+			{
+				ResourceName:      "configdirector_environment.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateIdFunc: func(s *terraform.State) (string, error) {
+					rs, ok := s.RootModule().Resources["configdirector_environment.test"]
+					if !ok {
+						return "", nil
+					}
+					return fmt.Sprintf("%s/%s", "test-project", rs.Primary.Attributes["slug"]), nil
+				},
+			},
+		},
+	})
+}
+
 // TestAccEnvironmentResource_updatesInPlace verifies that name/color/live
 // changes update the environment in place via the API. project_id is the
 // only attribute that still forces a replace, since the API has no way to

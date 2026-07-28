@@ -440,16 +440,25 @@ func (r *ConfigResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 }
 
+// ImportState accepts project_id_or_slug/key. The project half accepts
+// either form via resolveProjectID (there's no get-by-slug endpoint).
 func (r *ConfigResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	parts := strings.SplitN(req.ID, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		resp.Diagnostics.AddError(
 			"Unexpected Import Identifier",
-			fmt.Sprintf("Expected import identifier with format: project_id/key. Got: %q", req.ID),
+			fmt.Sprintf("Expected import identifier with format: project_id_or_slug/key. Got: %q", req.ID),
 		)
 		return
 	}
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), parts[0])...)
+
+	projectID, err := resolveProjectID(ctx, r.client, parts[0])
+	if err != nil {
+		resp.Diagnostics.AddError("Error Resolving Project", err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("project_id"), projectID)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("key"), parts[1])...)
 	resp.Diagnostics.AddWarning(
 		"initial_value Not Imported",

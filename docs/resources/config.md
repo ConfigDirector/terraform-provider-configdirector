@@ -169,14 +169,15 @@ In Terraform v1.5.0 and later, the [`import` block](https://developer.hashicorp.
 # Note: initial_value can't be recovered by import - see import.sh for why.
 import {
   to = configdirector_config.new_checkout_flow
-  id = "0198c1b2-3a4b-7c1d-8e2f-1a2b3c4d5e6f/new-checkout-flow"
+  id = "config-example/new-checkout-flow"
 }
 ```
 
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# <project_id>/<key>
+# <project_id_or_slug>/<key> - the project half accepts either its UUID or
+# its slug.
 #
 # Note: initial_value can't be recovered by import - the API never returns
 # a config's default value, so it reads as unset afterward, and the first
@@ -184,5 +185,5 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 # rather than actually changing anything remotely. Make sure it's set to
 # the value you want treated as the baseline going forward before that
 # first apply.
-terraform import configdirector_config.new_checkout_flow 0198c1b2-3a4b-7c1d-8e2f-1a2b3c4d5e6f/new-checkout-flow
+terraform import configdirector_config.new_checkout_flow config-example/new-checkout-flow
 ```
