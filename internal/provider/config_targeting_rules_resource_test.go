@@ -89,6 +89,100 @@ resource "configdirector_config_targeting_rules" "test" {
 	})
 }
 
+// TestAccConfigTargetingRulesResource_planAfterImport checks for the same
+// class of bug fixed in configdirector_config's initial_value (see
+// TestAccConfigResource_planAfterImport): default_value/rules aren't fully
+// populated by ImportState (rules is write-only and never reconciled at
+// all - see the schema description), so a plan immediately after import
+// could conflict with a configured value the same way initial_value did,
+// if either attribute pinned the plan to a possibly-null state value. They
+// don't (no custom PlanModifiers on either), so this is expected to pass
+// without any provider changes - it's here to prove that, not to drive a
+// fix.
+//
+// The project/config/target are set up directly via the client (not a
+// prior apply step) for the same reason as the config_resource_test.go
+// version: ImportStatePersist's first step needs a clean import into empty
+// state.
+func TestAccConfigTargetingRulesResource_planAfterImport(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("Acceptance tests skipped unless env 'TF_ACC' set")
+	}
+	testAccPreCheck(t)
+
+	ctx := context.Background()
+	c := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
+
+	project, err := c.CreateProject(ctx, client.CreateProjectRequest{Name: "Test Project", Slug: "test-project"})
+	if err != nil {
+		t.Fatalf("creating project: %s", err)
+	}
+	t.Cleanup(func() {
+		if err := c.DeleteProject(ctx, project.ID); err != nil {
+			t.Logf("cleaning up project %s: %s", project.ID, err)
+		}
+	})
+
+	if _, err := c.CreateConfig(ctx, project.ID, client.CreateConfigRequest{
+		Key:          "test-flag-key",
+		Role:         "flag",
+		Lifetime:     "temporary",
+		Type:         "boolean",
+		DefaultValue: true,
+	}); err != nil {
+		t.Fatalf("creating config: %s", err)
+	}
+
+	envs, err := c.ListEnvironments(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("listing environments: %s", err)
+	}
+	var envID string
+	for _, e := range envs {
+		if e.Slug == "test" {
+			envID = e.ID
+		}
+	}
+	if envID == "" {
+		t.Fatal("no \"test\" environment found")
+	}
+
+	if err := c.UpdateConfigTargets(ctx, project.ID, "test-flag-key", client.UpdateConfigTargetsRequest{
+		EnvironmentID: envID,
+		DefaultValue:  "false",
+		Rules:         []any{},
+	}); err != nil {
+		t.Fatalf("setting targeting rules: %s", err)
+	}
+
+	config := fmt.Sprintf(`
+resource "configdirector_config_targeting_rules" "test" {
+  project_id       = %q
+  config_key       = "test-flag-key"
+  environment_slug = "test"
+  default_value    = "false"
+  rules            = []
+}
+`, project.ID)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				ResourceName:       "configdirector_config_targeting_rules.test",
+				ImportState:        true,
+				ImportStatePersist: true,
+				ImportStateId:      project.ID + "/test-flag-key/test",
+			},
+			{
+				Config: config,
+				Check:  resource.TestCheckResourceAttr("configdirector_config_targeting_rules.test", "default_value", "false"),
+			},
+		},
+	})
+}
+
 // TestAccConfigTargetingRulesResource_updatesInPlace verifies that
 // default_value/rules changes update the targeting rules in place via the
 // API, not a replace. The framework's automatic post-apply refresh+plan
