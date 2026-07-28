@@ -28,11 +28,13 @@ terraform {
 }
 
 provider "configdirector" {
-  # base_url and token both default to the CONFIGDIRECTOR_BASE_URL and
-  # CONFIGDIRECTOR_TOKEN environment variables, respectively, so this block
-  # can usually be left empty.
+  # token defaults to the CONFIGDIRECTOR_TOKEN environment variable,
+  # so this block can usually be left empty.
 }
 ```
+
+You can generate an admin API token via the ConfigDirector dashboard, then export the CONFIGDIRECTOR_TOKEN environment variable with
+the API token.
 
 See the [`examples/`](examples/) directory for a runnable example of every resource, data source, and function this
 provider offers, and the [`docs/`](docs/) directory (or the [Registry documentation](https://registry.terraform.io/providers/ConfigDirector/configdirector/latest/docs))
