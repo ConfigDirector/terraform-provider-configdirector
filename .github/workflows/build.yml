@@ -4,7 +4,12 @@ on:
   push:
     # Tag pushes are covered by release.yml instead, which calls this
     # workflow as a pre-release gate - running it again here too would just
-    # duplicate that (expensive, hits the real API) run.
+    # duplicate that (expensive, hits the real API) run. branches must be
+    # listed explicitly alongside tags-ignore: leaving it unset doesn't
+    # reliably default to "all branches" the way it does when tags-ignore
+    # is absent.
+    branches:
+      - '**'
     tags-ignore:
       - '**'
   pull_request:
