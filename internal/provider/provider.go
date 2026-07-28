@@ -46,7 +46,7 @@ func (p *ConfigDirectorProvider) Schema(ctx context.Context, req provider.Schema
 		Attributes: map[string]schema.Attribute{
 			"base_url": schema.StringAttribute{
 				Optional:    true,
-				Description: "Base URL of the ConfigDirector API, e.g. https://api.configdirector.com/v1. Defaults to the CONFIGDIRECTOR_BASE_URL environment variable, falling back to " + defaultBaseUrl + ".",
+				Description: "Base URL of the ConfigDirector API, e.g. https://api.configdirector.com. Defaults to the CONFIGDIRECTOR_BASE_URL environment variable, falling back to " + defaultBaseUrl + ".",
 			},
 			"token": schema.StringAttribute{
 				Optional:    true,

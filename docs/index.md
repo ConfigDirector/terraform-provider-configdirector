@@ -32,5 +32,5 @@ provider "configdirector" {}
 
 ### Optional
 
-- `base_url` (String) Base URL of the ConfigDirector API, e.g. https://api.configdirector.com/v1. Defaults to the CONFIGDIRECTOR_BASE_URL environment variable, falling back to https://api.configdirector.com.
+- `base_url` (String) Base URL of the ConfigDirector API, e.g. https://api.configdirector.com. Defaults to the CONFIGDIRECTOR_BASE_URL environment variable, falling back to https://api.configdirector.com.
 - `token` (String, Sensitive) Bearer token used to authenticate with the ConfigDirector API. Defaults to the CONFIGDIRECTOR_TOKEN environment variable.
