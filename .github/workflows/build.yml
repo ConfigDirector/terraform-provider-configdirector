@@ -9,9 +9,9 @@ on:
     # reliably default to "all branches" the way it does when tags-ignore
     # is absent.
     branches:
-      - '**'
+      - "**"
     tags-ignore:
-      - '**'
+      - "**"
   pull_request:
   workflow_dispatch:
   workflow_call:
@@ -32,7 +32,14 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Test
+      - name: Test against dev API
+        run: make test_integration
+        env:
+          TF_ACC: 1
+          CONFIGDIRECTOR_TOKEN: ${{ secrets.CONFIGDIRECTOR_DEV_API_TOKEN }}
+          CONFIGDIRECTOR_BASE_URL: https://api.configdirector-dev.com
+
+      - name: Test against production API
         run: make test_integration
         env:
           TF_ACC: 1
