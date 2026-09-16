@@ -14,20 +14,15 @@ import (
 	"github.com/ConfigDirector/terraform-provider-configdirector/internal/client"
 )
 
-const configTestProjectConfig = `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "test-project"
-}
-`
-
 func TestAccConfigResource_createAndImport(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: configTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -84,6 +79,8 @@ resource "configdirector_config" "test" {
 // only exists for the newer plannable (import block) mode, which forbids
 // ImportStatePersist entirely.
 func TestAccConfigResource_planAfterImport(t *testing.T) {
+	p := newTestAccProject(t)
+
 	if os.Getenv("TF_ACC") == "" {
 		t.Skip("Acceptance tests skipped unless env 'TF_ACC' set")
 	}
@@ -92,7 +89,7 @@ func TestAccConfigResource_planAfterImport(t *testing.T) {
 	ctx := context.Background()
 	c := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
 
-	project, err := c.CreateProject(ctx, client.CreateProjectRequest{Name: "Test Project", Slug: "test-project"})
+	project, err := c.CreateProject(ctx, client.CreateProjectRequest{Name: p.Name, Slug: p.Slug})
 	if err != nil {
 		t.Fatalf("creating project: %s", err)
 	}
@@ -151,12 +148,14 @@ resource "configdirector_config" "test" {
 // configdirector_project's own ImportState, which resolves a slug via the
 // project list since there's no get-by-slug endpoint.
 func TestAccConfigResource_importByProjectSlug(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: configTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -177,7 +176,7 @@ resource "configdirector_config" "test" {
 					if !ok {
 						return "", nil
 					}
-					return fmt.Sprintf("%s/%s", "test-project", rs.Primary.Attributes["key"]), nil
+					return fmt.Sprintf("%s/%s", p.Slug, rs.Primary.Attributes["key"]), nil
 				},
 			},
 		},
@@ -190,6 +189,8 @@ resource "configdirector_config" "test" {
 // framework's automatic post-apply refresh+plan confirms the change was
 // actually persisted through the API.
 func TestAccConfigResource_updatesInPlace(t *testing.T) {
+	p := newTestAccProject(t)
+
 	var idBeforeUpdate string
 
 	resource.Test(t, resource.TestCase{
@@ -197,7 +198,7 @@ func TestAccConfigResource_updatesInPlace(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: configTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -215,7 +216,7 @@ resource "configdirector_config" "test" {
 				}),
 			},
 			{
-				Config: configTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -252,22 +253,15 @@ resource "configdirector_config" "test" {
 // RequiresReplace plan modifier on project_id: the API has no way to move a
 // config between projects.
 func TestAccConfigResource_projectIdChangeForcesReplacement(t *testing.T) {
+	a := newTestAccProject(t)
+	b := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: `
-resource "configdirector_project" "a" {
-  name = "Project A"
-  slug = "project-a"
-}
-
-resource "configdirector_project" "b" {
-  name = "Project B"
-  slug = "project-b"
-}
-
+				Config: a.config("a") + b.config("b") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.a.id
   key           = "test-flag-key"
@@ -279,17 +273,7 @@ resource "configdirector_config" "test" {
 `,
 			},
 			{
-				Config: `
-resource "configdirector_project" "a" {
-  name = "Project A"
-  slug = "project-a"
-}
-
-resource "configdirector_project" "b" {
-  name = "Project B"
-  slug = "project-b"
-}
-
+				Config: a.config("a") + b.config("b") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.b.id
   key           = "test-flag-key"
@@ -317,12 +301,14 @@ resource "configdirector_config" "test" {
 // Changing it afterward keeps showing a pending plan (it's never reconciled
 // away) but never reaches the API.
 func TestAccConfigResource_initialValueIgnoredAfterCreate(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: configTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -334,7 +320,7 @@ resource "configdirector_config" "test" {
 `,
 			},
 			{
-				Config: configTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -354,6 +340,8 @@ resource "configdirector_config" "test" {
 // when a config has been deleted outside of Terraform, refreshing state
 // should drop it from state, leaving a plan that wants to create it again.
 func TestAccConfigResource_deletedOutOfBand(t *testing.T) {
+	p := newTestAccProject(t)
+
 	var projectID, key string
 
 	resource.Test(t, resource.TestCase{
@@ -361,7 +349,7 @@ func TestAccConfigResource_deletedOutOfBand(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: configTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -406,12 +394,14 @@ resource "configdirector_config" "test" {
 // requiring role "experiment" for variations. These fail during plan,
 // before any API call is made.
 func TestAccConfigResource_validation(t *testing.T) {
+	p := newTestAccProject(t)
+
 	testCases := map[string]struct {
 		config      string
 		expectError string
 	}{
 		"key too short": {
-			config: configTestProjectConfig + `
+			config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "abc"
@@ -424,7 +414,7 @@ resource "configdirector_config" "test" {
 			expectError: `string length must be between 4 and 150`,
 		},
 		"invalid role": {
-			config: configTestProjectConfig + `
+			config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -437,7 +427,7 @@ resource "configdirector_config" "test" {
 			expectError: `value must be one of`,
 		},
 		"invalid lifetime": {
-			config: configTestProjectConfig + `
+			config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -450,7 +440,7 @@ resource "configdirector_config" "test" {
 			expectError: `value must be one of`,
 		},
 		"invalid type": {
-			config: configTestProjectConfig + `
+			config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -463,7 +453,7 @@ resource "configdirector_config" "test" {
 			expectError: `value must be one of`,
 		},
 		"variations without experiment role": {
-			config: configTestProjectConfig + `
+			config: p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"

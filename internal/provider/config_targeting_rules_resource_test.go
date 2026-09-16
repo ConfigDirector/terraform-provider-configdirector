@@ -14,7 +14,8 @@ import (
 	"github.com/ConfigDirector/terraform-provider-configdirector/internal/client"
 )
 
-const targetingRulesTestConfigConfig = configTestProjectConfig + `
+func targetingRulesTestConfig(p testAccProject) string {
+	return p.config("test") + `
 resource "configdirector_config" "test" {
   project_id    = configdirector_project.test.id
   key           = "test-flag-key"
@@ -24,14 +25,17 @@ resource "configdirector_config" "test" {
   initial_value = true
 }
 `
+}
 
 func TestAccConfigTargetingRulesResource_createAndImport(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: targetingRulesTestConfigConfig + `
+				Config: targetingRulesTestConfig(p) + `
 resource "configdirector_config_targeting_rules" "test" {
   project_id       = configdirector_project.test.id
   config_key       = configdirector_config.test.key
@@ -94,12 +98,14 @@ resource "configdirector_config_targeting_rules" "test" {
 // mirroring configdirector_project's own ImportState, which resolves a
 // slug via the project list since there's no get-by-slug endpoint.
 func TestAccConfigTargetingRulesResource_importByProjectSlug(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: targetingRulesTestConfigConfig + `
+				Config: targetingRulesTestConfig(p) + `
 resource "configdirector_config_targeting_rules" "test" {
   project_id       = configdirector_project.test.id
   config_key       = configdirector_config.test.key
@@ -120,7 +126,7 @@ resource "configdirector_config_targeting_rules" "test" {
 					if !ok {
 						return "", nil
 					}
-					return fmt.Sprintf("%s/%s/%s", "test-project", rs.Primary.Attributes["config_key"], rs.Primary.Attributes["environment_slug"]), nil
+					return fmt.Sprintf("%s/%s/%s", p.Slug, rs.Primary.Attributes["config_key"], rs.Primary.Attributes["environment_slug"]), nil
 				},
 			},
 		},
@@ -143,6 +149,8 @@ resource "configdirector_config_targeting_rules" "test" {
 // version: ImportStatePersist's first step needs a clean import into empty
 // state.
 func TestAccConfigTargetingRulesResource_planAfterImport(t *testing.T) {
+	p := newTestAccProject(t)
+
 	if os.Getenv("TF_ACC") == "" {
 		t.Skip("Acceptance tests skipped unless env 'TF_ACC' set")
 	}
@@ -151,7 +159,7 @@ func TestAccConfigTargetingRulesResource_planAfterImport(t *testing.T) {
 	ctx := context.Background()
 	c := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
 
-	project, err := c.CreateProject(ctx, client.CreateProjectRequest{Name: "Test Project", Slug: "test-project"})
+	project, err := c.CreateProject(ctx, client.CreateProjectRequest{Name: p.Name, Slug: p.Slug})
 	if err != nil {
 		t.Fatalf("creating project: %s", err)
 	}
@@ -228,12 +236,14 @@ resource "configdirector_config_targeting_rules" "test" {
 // itself is write-only and never reconciled, so it can't be verified the
 // same way - see the schema description).
 func TestAccConfigTargetingRulesResource_updatesInPlace(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: targetingRulesTestConfigConfig + `
+				Config: targetingRulesTestConfig(p) + `
 resource "configdirector_config_targeting_rules" "test" {
   project_id       = configdirector_project.test.id
   config_key       = configdirector_config.test.key
@@ -244,7 +254,7 @@ resource "configdirector_config_targeting_rules" "test" {
 `,
 			},
 			{
-				Config: targetingRulesTestConfigConfig + `
+				Config: targetingRulesTestConfig(p) + `
 resource "configdirector_config_targeting_rules" "test" {
   project_id       = configdirector_project.test.id
   config_key       = configdirector_config.test.key
@@ -270,12 +280,14 @@ resource "configdirector_config_targeting_rules" "test" {
 // environment, so switching environments is a different resource, not an
 // update to this one.
 func TestAccConfigTargetingRulesResource_environmentChangeForcesReplacement(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: targetingRulesTestConfigConfig + `
+				Config: targetingRulesTestConfig(p) + `
 resource "configdirector_config_targeting_rules" "test" {
   project_id       = configdirector_project.test.id
   config_key       = configdirector_config.test.key
@@ -286,7 +298,7 @@ resource "configdirector_config_targeting_rules" "test" {
 `,
 			},
 			{
-				Config: targetingRulesTestConfigConfig + `
+				Config: targetingRulesTestConfig(p) + `
 resource "configdirector_config_targeting_rules" "test" {
   project_id       = configdirector_project.test.id
   config_key       = configdirector_config.test.key
@@ -312,6 +324,8 @@ resource "configdirector_config_targeting_rules" "test" {
 // (see targetingRulesToModel) - deleting the parent config out of band
 // should drop this resource from state too.
 func TestAccConfigTargetingRulesResource_deletedOutOfBand(t *testing.T) {
+	p := newTestAccProject(t)
+
 	var projectID, configKey string
 
 	resource.Test(t, resource.TestCase{
@@ -319,7 +333,7 @@ func TestAccConfigTargetingRulesResource_deletedOutOfBand(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: targetingRulesTestConfigConfig + `
+				Config: targetingRulesTestConfig(p) + `
 resource "configdirector_config_targeting_rules" "test" {
   project_id       = configdirector_project.test.id
   config_key       = configdirector_config.test.key
@@ -364,12 +378,14 @@ resource "configdirector_config_targeting_rules" "test" {
 // be unique across the whole rules value. This fails during plan, before
 // any API call is made.
 func TestAccConfigTargetingRulesResource_duplicateRuleIds(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: targetingRulesTestConfigConfig + `
+				Config: targetingRulesTestConfig(p) + `
 resource "configdirector_config_targeting_rules" "test" {
   project_id       = configdirector_project.test.id
   config_key       = configdirector_config.test.key

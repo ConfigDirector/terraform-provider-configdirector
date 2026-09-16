@@ -16,21 +16,18 @@ import (
 )
 
 func TestAccProjectResource_createAndImport(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "test-project"
-}
-`,
+				Config: p.config("test"),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("configdirector_project.test", "id"),
-					resource.TestCheckResourceAttr("configdirector_project.test", "name", "Test Project"),
-					resource.TestCheckResourceAttr("configdirector_project.test", "slug", "test-project"),
+					resource.TestCheckResourceAttr("configdirector_project.test", "name", p.Name),
+					resource.TestCheckResourceAttr("configdirector_project.test", "slug", p.Slug),
 					resource.TestCheckResourceAttrSet("configdirector_project.test", "organization_id"),
 					resource.TestCheckResourceAttr("configdirector_project.test", "environments.#", "2"),
 					resource.TestCheckTypeSetElemNestedAttrs("configdirector_project.test", "environments.*", map[string]string{
@@ -56,17 +53,14 @@ resource "configdirector_project" "test" {
 // path: the project's slug, not just its id (see project_resource.go's
 // ImportState, which falls back to a ListProjects scan for slugs).
 func TestAccProjectResource_importBySlug(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "test-project"
-}
-`,
+				Config: p.config("test"),
 			},
 			{
 				ResourceName:      "configdirector_project.test",
@@ -85,6 +79,8 @@ resource "configdirector_project" "test" {
 }
 
 func TestAccProjectResource_renameUpdatesInPlace(t *testing.T) {
+	p := newTestAccProject(t)
+	renamed := testAccProject{Name: p.Name + " Renamed", Slug: p.Slug}
 	var idBeforeUpdate string
 
 	resource.Test(t, resource.TestCase{
@@ -92,31 +88,21 @@ func TestAccProjectResource_renameUpdatesInPlace(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "test-project"
-}
-`,
+				Config: p.config("test"),
 				Check: resource.TestCheckResourceAttrWith("configdirector_project.test", "id", func(value string) error {
 					idBeforeUpdate = value
 					return nil
 				}),
 			},
 			{
-				Config: `
-resource "configdirector_project" "test" {
-  name = "Renamed Project"
-  slug = "test-project"
-}
-`,
+				Config: renamed.config("test"),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction("configdirector_project.test", plancheck.ResourceActionUpdate),
 					},
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("configdirector_project.test", "name", "Renamed Project"),
+					resource.TestCheckResourceAttr("configdirector_project.test", "name", renamed.Name),
 					resource.TestCheckResourceAttrWith("configdirector_project.test", "id", func(value string) error {
 						if value != idBeforeUpdate {
 							return fmt.Errorf("expected id to remain %q after rename, got %q", idBeforeUpdate, value)
@@ -130,6 +116,8 @@ resource "configdirector_project" "test" {
 }
 
 func TestAccProjectResource_slugChangeUpdatesInPlace(t *testing.T) {
+	p := newTestAccProject(t)
+	reslugged := testAccProject{Name: p.Name, Slug: p.Slug + "-renamed"}
 	var idBeforeUpdate string
 
 	resource.Test(t, resource.TestCase{
@@ -137,31 +125,21 @@ func TestAccProjectResource_slugChangeUpdatesInPlace(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "test-project"
-}
-`,
+				Config: p.config("test"),
 				Check: resource.TestCheckResourceAttrWith("configdirector_project.test", "id", func(value string) error {
 					idBeforeUpdate = value
 					return nil
 				}),
 			},
 			{
-				Config: `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "renamed-project"
-}
-`,
+				Config: reslugged.config("test"),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction("configdirector_project.test", plancheck.ResourceActionUpdate),
 					},
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("configdirector_project.test", "slug", "renamed-project"),
+					resource.TestCheckResourceAttr("configdirector_project.test", "slug", reslugged.Slug),
 					resource.TestCheckResourceAttrWith("configdirector_project.test", "id", func(value string) error {
 						if value != idBeforeUpdate {
 							return fmt.Errorf("expected id to remain %q after slug change, got %q", idBeforeUpdate, value)
@@ -179,6 +157,7 @@ resource "configdirector_project" "test" {
 // should drop it from state (rather than erroring), leaving a plan that
 // wants to create it again.
 func TestAccProjectResource_deletedOutOfBand(t *testing.T) {
+	p := newTestAccProject(t)
 	var projectID string
 
 	resource.Test(t, resource.TestCase{
@@ -186,12 +165,7 @@ func TestAccProjectResource_deletedOutOfBand(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "test-project"
-}
-`,
+				Config: p.config("test"),
 				Check: resource.TestCheckResourceAttrWith("configdirector_project.test", "id", func(value string) error {
 					projectID = value
 					return nil
@@ -219,35 +193,22 @@ resource "configdirector_project" "test" {
 // TestAccProjectResource_validation covers the schema-level validators on
 // name/slug. These fail during plan, before any API call is made.
 func TestAccProjectResource_validation(t *testing.T) {
+	p := newTestAccProject(t)
+
 	testCases := map[string]struct {
 		config      string
 		expectError string
 	}{
 		"name too long": {
-			config: `
-resource "configdirector_project" "test" {
-  name = "` + strings.Repeat("a", 256) + `"
-  slug = "test-project"
-}
-`,
+			config:      testAccProject{Name: strings.Repeat("a", 256), Slug: p.Slug}.config("test"),
 			expectError: `string length must be between 1 and 255`,
 		},
 		"slug with invalid characters": {
-			config: `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "Not A Valid Slug!"
-}
-`,
+			config:      testAccProject{Name: p.Name, Slug: "Not A Valid Slug!"}.config("test"),
 			expectError: `value must match regular expression`,
 		},
 		"slug with consecutive separators": {
-			config: `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "test--project"
-}
-`,
+			config:      testAccProject{Name: p.Name, Slug: "test--project"}.config("test"),
 			expectError: `value must match regular expression`,
 		},
 	}

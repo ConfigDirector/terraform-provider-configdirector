@@ -23,11 +23,21 @@ jobs:
     concurrency: build-and-test
     permissions:
       contents: "read"
+      issues: "write"
+    env:
+      CI_FAILURE_LABEL: ci-failure
+      CI_FAILURE_ASSIGNEE: abeiderman
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: 1.26.5
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.2
+          terraform_wrapper: false
+      - name: Pin the Terraform CLI used by acceptance tests
+        run: echo "TF_ACC_TERRAFORM_PATH=$(which terraform)" >> "$GITHUB_ENV"
 
       - name: Build
         run: make build
@@ -44,3 +54,36 @@ jobs:
         env:
           TF_ACC: 1
           CONFIGDIRECTOR_TOKEN: ${{ secrets.CONFIGDIRECTOR_API_TOKEN }}
+
+      - name: Open or update the CI failure issue
+        if: failure() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TRIGGER: ${{ github.event_name }} by ${{ github.triggering_actor }}
+        run: |
+          gh label create "$CI_FAILURE_LABEL" --repo "$GITHUB_REPOSITORY" --force \
+            --color B60205 --description "Opened automatically when Build and Test fails on main"
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label "$CI_FAILURE_LABEL" --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" \
+              --body "Build and Test failed again ($TRIGGER): $RUN_URL"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Build and Test is failing on main" \
+              --label "$CI_FAILURE_LABEL" \
+              --assignee "$CI_FAILURE_ASSIGNEE" \
+              --body "Build and Test failed ($TRIGGER): $RUN_URL
+
+          This issue is opened automatically by the workflow and closes itself once a run on main passes again. Later failures are added as comments."
+          fi
+
+      - name: Close the CI failure issue
+        if: success() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for number in $(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label "$CI_FAILURE_LABEL" --json number --jq '.[].number'); do
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "Build and Test is passing again: $RUN_URL"
+          done

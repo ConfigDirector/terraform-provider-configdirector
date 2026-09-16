@@ -15,20 +15,15 @@ import (
 	"github.com/ConfigDirector/terraform-provider-configdirector/internal/client"
 )
 
-const environmentTestProjectConfig = `
-resource "configdirector_project" "test" {
-  name = "Test Project"
-  slug = "test-project"
-}
-`
-
 func TestAccEnvironmentResource_createAndImport(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: environmentTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
@@ -66,12 +61,14 @@ resource "configdirector_environment" "test" {
 // lookup path: project_id/slug, not just project_id/id (see
 // environment_resource.go's ImportState).
 func TestAccEnvironmentResource_importBySlug(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: environmentTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
@@ -102,12 +99,14 @@ resource "configdirector_environment" "test" {
 // mirroring configdirector_project's own ImportState, which resolves a
 // slug via the project list since there's no get-by-slug endpoint.
 func TestAccEnvironmentResource_importByProjectSlug(t *testing.T) {
+	p := newTestAccProject(t)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: environmentTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
@@ -126,7 +125,7 @@ resource "configdirector_environment" "test" {
 					if !ok {
 						return "", nil
 					}
-					return fmt.Sprintf("%s/%s", "test-project", rs.Primary.Attributes["slug"]), nil
+					return fmt.Sprintf("%s/%s", p.Slug, rs.Primary.Attributes["slug"]), nil
 				},
 			},
 		},
@@ -140,6 +139,8 @@ resource "configdirector_environment" "test" {
 // it's a true update; the framework's automatic post-apply refresh+plan
 // confirms the change was actually persisted through the API.
 func TestAccEnvironmentResource_updatesInPlace(t *testing.T) {
+	p := newTestAccProject(t)
+
 	var idBeforeUpdate string
 
 	resource.Test(t, resource.TestCase{
@@ -147,7 +148,7 @@ func TestAccEnvironmentResource_updatesInPlace(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: environmentTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
@@ -162,7 +163,7 @@ resource "configdirector_environment" "test" {
 				}),
 			},
 			{
-				Config: environmentTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging Renamed"
@@ -193,6 +194,8 @@ resource "configdirector_environment" "test" {
 }
 
 func TestAccEnvironmentResource_slugChangeUpdatesInPlace(t *testing.T) {
+	p := newTestAccProject(t)
+
 	var idBeforeUpdate string
 
 	resource.Test(t, resource.TestCase{
@@ -200,7 +203,7 @@ func TestAccEnvironmentResource_slugChangeUpdatesInPlace(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: environmentTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
@@ -215,7 +218,7 @@ resource "configdirector_environment" "test" {
 				}),
 			},
 			{
-				Config: environmentTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
@@ -248,6 +251,8 @@ resource "configdirector_environment" "test" {
 // refreshing state should drop it from state, leaving a plan that wants to
 // create it again.
 func TestAccEnvironmentResource_deletedOutOfBand(t *testing.T) {
+	p := newTestAccProject(t)
+
 	var projectID, environmentID string
 
 	resource.Test(t, resource.TestCase{
@@ -255,7 +260,7 @@ func TestAccEnvironmentResource_deletedOutOfBand(t *testing.T) {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: environmentTestProjectConfig + `
+				Config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
@@ -297,12 +302,14 @@ resource "configdirector_environment" "test" {
 // TestAccEnvironmentResource_validation covers the schema-level validators
 // on name/slug/color. These fail during plan, before any API call is made.
 func TestAccEnvironmentResource_validation(t *testing.T) {
+	p := newTestAccProject(t)
+
 	testCases := map[string]struct {
 		config      string
 		expectError string
 	}{
 		"name too long": {
-			config: environmentTestProjectConfig + `
+			config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "` + strings.Repeat("a", 201) + `"
@@ -314,7 +321,7 @@ resource "configdirector_environment" "test" {
 			expectError: `string length must be between 1 and 200`,
 		},
 		"slug too short": {
-			config: environmentTestProjectConfig + `
+			config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
@@ -326,7 +333,7 @@ resource "configdirector_environment" "test" {
 			expectError: `string length must be between 4 and 150`,
 		},
 		"invalid color": {
-			config: environmentTestProjectConfig + `
+			config: p.config("test") + `
 resource "configdirector_environment" "test" {
   project_id = configdirector_project.test.id
   name       = "Staging"
