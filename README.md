@@ -4,8 +4,9 @@
 [![Terraform Registry](https://img.shields.io/badge/Terraform%20Registry-ConfigDirector%2Fconfigdirector-844FBA)](https://registry.terraform.io/providers/ConfigDirector/configdirector/latest)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](LICENSE)
 
-This is the official Terraform provider for [ConfigDirector](https://www.configdirector.com), letting you manage
-projects, environments, configs, and feature-flag/config targeting rules as Terraform resources.
+This is the official Terraform provider for [ConfigDirector](https://www.configdirector.com), remote config and
+feature flags with typed values, JSON Schema validation, and safe renames of live flags. It manages projects,
+environments, configs, and targeting rules as Terraform resources.
 
 ## Requirements
 
@@ -22,7 +23,7 @@ terraform {
   required_providers {
     configdirector = {
       source  = "registry.terraform.io/ConfigDirector/configdirector"
-      version = "~> 0.1"
+      version = "~> 0.2"
     }
   }
 }
@@ -35,6 +36,28 @@ provider "configdirector" {
 
 You can generate an admin API token via the ConfigDirector dashboard, then export the CONFIGDIRECTOR_TOKEN environment variable with
 the API token.
+
+A project with one feature flag looks like this:
+
+```hcl
+resource "configdirector_project" "example" {
+  name = "Config Example"
+  slug = "config-example"
+}
+
+resource "configdirector_config" "new_checkout_flow" {
+  project_id  = configdirector_project.example.id
+  key         = "new-checkout-flow"
+  description = "Enables the redesigned checkout flow."
+  role        = "flag"
+  lifetime    = "temporary"
+  type        = "boolean"
+
+  initial_value = false
+}
+```
+
+Full details are in the [official documentation](https://docs.configdirector.com/integrations/terraform).
 
 See the [`examples/`](examples/) directory for a runnable example of every resource, data source, and function this
 provider offers, and the [`docs/`](docs/) directory (or the [Registry documentation](https://registry.terraform.io/providers/ConfigDirector/configdirector/latest/docs))
@@ -72,6 +95,11 @@ overrides, instead of the published release.
 Releases are cut by pushing a `v*` tag (e.g. `v0.2.0`). The [release workflow](.github/workflows/release.yml) runs
 the full build-and-test suite as a gate, then builds, signs, and publishes the release via
 [GoReleaser](https://goreleaser.com), which the Terraform Registry picks up automatically.
+
+## Getting Help
+
+- [Ask a question in Discussions](https://github.com/orgs/ConfigDirector/discussions)
+- [Contact support](https://www.configdirector.com/support)
 
 ## License
 
