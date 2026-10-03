@@ -15,6 +15,9 @@ get pulled directly into the generated provider docs.
   - [configdirector_config_targeting_rules](resources/configdirector_config_targeting_rules/resource.tf) -
     multiple configs, each with conditional and percentage-based targeting
     rules across environments
+  - [configdirector_segment](resources/configdirector_segment/resource.tf) -
+    a segment with two condition groups and an environment override, used by
+    a targeting rule through a segment condition
 - `data-sources/<data_source_type>/data-source.tf` - one directory per data
   source, each creating whatever resource(s) it needs to look up:
   - [configdirector_project](data-sources/configdirector_project/data-source.tf)

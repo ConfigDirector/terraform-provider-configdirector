@@ -69,7 +69,31 @@ resource "configdirector_config_targeting_rules" "beta_features_test" {
   ]
 }
 
-# In "production", the flag is on for 10% of traffic.
+# A segment is a reusable test of a context, defined once and usable by the
+# rules of any config in the project. See the configdirector_segment example
+# for the full shape.
+resource "configdirector_segment" "internal_users" {
+  project_id = configdirector_project.example.id
+  key        = "internal-users"
+  name       = "Internal users"
+
+  groups = [
+    [
+      {
+        id           = provider::configdirector::rule_id("internal-users-email")
+        attribute    = "traits"
+        trait        = "/email"
+        operator     = "ends with any of"
+        targetType   = "text"
+        targetValues = ["@example.com"]
+      }
+    ]
+  ]
+}
+
+# In "production", internal users always get the flag; everyone else is in a
+# 10% rollout. A segment rule is a conditional rule whose condition has
+# kind = "segment", an operator of "in" or "not in", and the segment's id.
 resource "configdirector_config_targeting_rules" "beta_features_production" {
   project_id       = configdirector_project.example.id
   config_key       = configdirector_config.beta_features.key
@@ -78,9 +102,24 @@ resource "configdirector_config_targeting_rules" "beta_features_production" {
 
   rules = [
     {
+      id     = provider::configdirector::rule_id("beta-features-production-internal-users")
+      type   = "conditional"
+      order  = 0
+      target = "value"
+      value  = true
+      conditions = [
+        {
+          id        = provider::configdirector::rule_id("beta-features-production-internal-users-segment")
+          kind      = "segment"
+          operator  = "in"
+          segmentId = configdirector_segment.internal_users.id
+        }
+      ]
+    },
+    {
       id     = provider::configdirector::rule_id("beta-features-production-rollout")
       type   = "percentage"
-      order  = 0
+      order  = 1
       target = "percentage"
       percentages = [
         {
@@ -192,7 +231,7 @@ resource "configdirector_config_targeting_rules" "checkout_button_copy_productio
 - `default_value` (String) Default value for this environment. Regardless of what type you write here or send on write, the API always stores and returns this as a string (confirmed empirically: sending a bool or number back gets you a stringified version on read), so it's modeled as a plain string rather than a dynamic value. This is a full-replace endpoint: omitting this while setting "rules" clears any previously configured default value, it does not leave it untouched.
 - `environment_id` (String)
 - `environment_slug` (String)
-- `rules` (Dynamic) Targeting rules for this environment, as a list of rule objects (conditional or percentage-based, matching the API's shape). Not validated by Terraform beyond structure - passed through as-is and validated by the API. Every rule/condition/percentage-bucket needs an "id" (the API requires it, and Terraform has no way for this provider to generate one itself - see RuleIDFunction/rule_id_function.go for why): use the provider::configdirector::rule_id("some-stable-name") function rather than typing a UUID by hand, and give each rule/condition/percentage-bucket its own distinct seed - ids must be unique across the entire value (rule ids, condition ids, and percentage-bucket ids all share one namespace, including across different rules). Write-only: the API embeds extra generated fields (e.g. valueId) into whatever you write, so unlike most attributes this is never reconciled against a subsequent read - external changes to targeting rules won't show up as drift.
+- `rules` (Dynamic) Targeting rules for this environment, as a list of rule objects (conditional or percentage-based, matching the API's shape). Not validated by Terraform beyond structure - passed through as-is and validated by the API. Every rule/condition/percentage-bucket needs an "id" (the API requires it, and Terraform has no way for this provider to generate one itself - see RuleIDFunction/rule_id_function.go for why): use the provider::configdirector::rule_id("some-stable-name") function rather than typing a UUID by hand, and give each rule/condition/percentage-bucket its own distinct seed - ids must be unique across the entire value (rule ids, condition ids, and percentage-bucket ids all share one namespace, including across different rules). Write-only: the API embeds extra generated fields (e.g. valueId) into whatever you write, so unlike most attributes this is never reconciled against a subsequent read - external changes to targeting rules won't show up as drift. A conditional rule's condition is an attribute condition ({ id, attribute, operator, targetType, targetValues, and trait for the traits attribute }) or a segment condition ({ id, kind = "segment", operator = "in" or "not in", segmentId }, with segmentId the id attribute of a configdirector_segment); a rule matches when all of its conditions match.
 
 ## Import
 

@@ -6,7 +6,7 @@
 
 This is the official Terraform provider for [ConfigDirector](https://www.configdirector.com), remote config and
 feature flags with typed values, JSON Schema validation, and safe renames of live flags. It manages projects,
-environments, configs, and targeting rules as Terraform resources.
+environments, configs, segments, and targeting rules as Terraform resources.
 
 ## Requirements
 

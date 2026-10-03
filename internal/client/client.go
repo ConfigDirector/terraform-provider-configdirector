@@ -412,3 +412,68 @@ func (c *Client) ListConfigs(ctx context.Context, projectID string) ([]Config, e
 	}
 	return out, nil
 }
+
+type SegmentUsage struct {
+	ConfigKey      string   `json:"configKey"`
+	EnvironmentIDs []string `json:"environmentIds"`
+}
+
+type Segment struct {
+	ID        string         `json:"id"`
+	ProjectID string         `json:"projectId"`
+	Key       string         `json:"key"`
+	Name      string         `json:"name"`
+	Kind      string         `json:"kind"`
+	Groups    any            `json:"groups"`
+	Overrides map[string]any `json:"overrides"`
+	Usages    []SegmentUsage `json:"usages"`
+	CreatedAt string         `json:"createdAt"`
+	UpdatedAt string         `json:"updatedAt"`
+}
+
+type CreateSegmentRequest struct {
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	Groups    any    `json:"groups"`
+	Overrides any    `json:"overrides,omitempty"`
+}
+
+type UpdateSegmentRequest struct {
+	ID        string `json:"id"`
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	Groups    any    `json:"groups"`
+	Overrides any    `json:"overrides"`
+}
+
+func (c *Client) CreateSegment(ctx context.Context, projectID string, req CreateSegmentRequest) (*Segment, error) {
+	var out Segment
+	path := fmt.Sprintf("/v1/projects/%s/segments", pathEscape(projectID))
+	if err := c.do(ctx, http.MethodPost, path, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) GetSegment(ctx context.Context, projectID, key string) (*Segment, error) {
+	var out Segment
+	path := fmt.Sprintf("/v1/projects/%s/segments/%s", pathEscape(projectID), pathEscape(key))
+	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UpdateSegment(ctx context.Context, projectID, key string, req UpdateSegmentRequest) (*Segment, error) {
+	var out Segment
+	path := fmt.Sprintf("/v1/projects/%s/segments/%s", pathEscape(projectID), pathEscape(key))
+	if err := c.do(ctx, http.MethodPut, path, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) DeleteSegment(ctx context.Context, projectID, key string) error {
+	path := fmt.Sprintf("/v1/projects/%s/segments/%s", pathEscape(projectID), pathEscape(key))
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}

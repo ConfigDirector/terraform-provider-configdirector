@@ -54,7 +54,31 @@ resource "configdirector_config_targeting_rules" "beta_features_test" {
   ]
 }
 
-# In "production", the flag is on for 10% of traffic.
+# A segment is a reusable test of a context, defined once and usable by the
+# rules of any config in the project. See the configdirector_segment example
+# for the full shape.
+resource "configdirector_segment" "internal_users" {
+  project_id = configdirector_project.example.id
+  key        = "internal-users"
+  name       = "Internal users"
+
+  groups = [
+    [
+      {
+        id           = provider::configdirector::rule_id("internal-users-email")
+        attribute    = "traits"
+        trait        = "/email"
+        operator     = "ends with any of"
+        targetType   = "text"
+        targetValues = ["@example.com"]
+      }
+    ]
+  ]
+}
+
+# In "production", internal users always get the flag; everyone else is in a
+# 10% rollout. A segment rule is a conditional rule whose condition has
+# kind = "segment", an operator of "in" or "not in", and the segment's id.
 resource "configdirector_config_targeting_rules" "beta_features_production" {
   project_id       = configdirector_project.example.id
   config_key       = configdirector_config.beta_features.key
@@ -63,9 +87,24 @@ resource "configdirector_config_targeting_rules" "beta_features_production" {
 
   rules = [
     {
+      id     = provider::configdirector::rule_id("beta-features-production-internal-users")
+      type   = "conditional"
+      order  = 0
+      target = "value"
+      value  = true
+      conditions = [
+        {
+          id        = provider::configdirector::rule_id("beta-features-production-internal-users-segment")
+          kind      = "segment"
+          operator  = "in"
+          segmentId = configdirector_segment.internal_users.id
+        }
+      ]
+    },
+    {
       id     = provider::configdirector::rule_id("beta-features-production-rollout")
       type   = "percentage"
-      order  = 0
+      order  = 1
       target = "percentage"
       percentages = [
         {
