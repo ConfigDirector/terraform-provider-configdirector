@@ -18,6 +18,8 @@ get pulled directly into the generated provider docs.
   - [configdirector_segment](resources/configdirector_segment/resource.tf) -
     a segment with two condition groups and an environment override, used by
     a targeting rule through a segment condition
+  - [configdirector_tag](resources/configdirector_tag/resource.tf) -
+    a shared project tag with spaces and punctuation in its name
 - `data-sources/<data_source_type>/data-source.tf` - one directory per data
   source, each creating whatever resource(s) it needs to look up:
   - [configdirector_project](data-sources/configdirector_project/data-source.tf)
@@ -63,6 +65,13 @@ By default the provider talks to `https://api.configdirector.com`. Set
 
 Run `terraform destroy` when you're done with an example to clean up the
 project (and everything under it) it created.
+
+The tag catalog example also works with OpenTofu using the same provider address and resource configuration.
+The token needs `tags:read`, `tags:create`, `tags:update`, and `tags:delete`, alongside the project scopes
+needed by its project resource. Tag imports use a project UUID or slug followed by `/` and the literal name;
+quote names containing spaces or punctuation, and leave additional slashes and percent sequences unchanged.
+Project slug imports additionally need `projects:read`. See the [tag catalog guide](../README.md#managing-the-tag-catalog-with-terraform-or-opentofu)
+for lifecycle behavior and both import commands.
 
 ## Testing against a local, unreleased build
 

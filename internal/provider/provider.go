@@ -96,6 +96,7 @@ func (p *ConfigDirectorProvider) Resources(ctx context.Context) []func() resourc
 		NewConfigResource,
 		NewConfigTargetingRulesResource,
 		NewSegmentResource,
+		newTagResource,
 	}
 }
 
