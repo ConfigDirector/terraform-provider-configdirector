@@ -285,6 +285,12 @@ type Config struct {
 	CreatedAt      string          `json:"createdAt"`
 	UpdatedAt      string          `json:"updatedAt"`
 	DeprecatedKeys []DeprecatedKey `json:"deprecatedKeys"`
+	Tags           []AssignedTag   `json:"tags"`
+}
+
+type AssignedTag struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type CreateConfigRequest struct {
@@ -298,6 +304,7 @@ type CreateConfigRequest struct {
 	Client       *bool       `json:"client,omitempty"`
 	Variations   []Variation `json:"variations,omitempty"`
 	DefaultValue any         `json:"defaultValue"`
+	TagIDs       *[]string   `json:"tagIds,omitempty"`
 }
 
 type updateConfigAvailability struct {
@@ -314,6 +321,7 @@ type updateConfigRequest struct {
 	TypeOptions  any                       `json:"typeOptions,omitempty"`
 	Variations   []Variation               `json:"variations,omitempty"`
 	Availability *updateConfigAvailability `json:"availability,omitempty"`
+	TagIDs       *[]string                 `json:"tagIds,omitempty"`
 }
 
 // UpdateConfigRequest is the caller-facing shape; the API's PATCH endpoint
@@ -329,6 +337,7 @@ type UpdateConfigRequest struct {
 	Variations  []Variation
 	Server      bool
 	Client      bool
+	TagIDs      *[]string
 }
 
 func (c *Client) CreateConfig(ctx context.Context, projectID string, req CreateConfigRequest) (*Config, error) {
@@ -362,6 +371,7 @@ func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req Up
 		Type:        req.Type,
 		TypeOptions: req.TypeOptions,
 		Variations:  req.Variations,
+		TagIDs:      req.TagIDs,
 		Availability: &updateConfigAvailability{
 			Server: req.Server,
 			Client: req.Client,

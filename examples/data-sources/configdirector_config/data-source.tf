@@ -21,6 +21,12 @@ resource "configdirector_config" "example" {
   lifetime      = "temporary"
   type          = "boolean"
   initial_value = false
+  tags          = [configdirector_tag.payments.name]
+}
+
+resource "configdirector_tag" "payments" {
+  project_id = configdirector_project.example.id
+  name       = "Payments"
 }
 
 data "configdirector_config" "example" {
@@ -30,4 +36,8 @@ data "configdirector_config" "example" {
 
 output "config_state" {
   value = data.configdirector_config.example.state
+}
+
+output "assigned_tag_names" {
+  value = data.configdirector_config.example.tags
 }

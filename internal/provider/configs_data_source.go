@@ -41,6 +41,11 @@ func (d *ConfigsDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"tags": schema.SetAttribute{
+							Computed:    true,
+							ElementType: types.StringType,
+							Description: "Current assigned tag names. Included under configs:read without requiring tags:read.",
+						},
 						"id":          schema.StringAttribute{Computed: true},
 						"key":         schema.StringAttribute{Computed: true},
 						"description": schema.StringAttribute{Computed: true},
@@ -96,6 +101,11 @@ func (d *ConfigsDataSource) Read(ctx context.Context, req datasource.ReadRequest
 
 	models := make([]configSummaryModel, len(configs))
 	for i, cfg := range configs {
+		tags, tagDiags := (configTagAssignments{}).names(ctx, cfg.Tags)
+		resp.Diagnostics.Append(tagDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		keysList, diags := deprecatedKeysListValue(ctx, cfg.DeprecatedKeys)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
@@ -113,6 +123,7 @@ func (d *ConfigsDataSource) Read(ctx context.Context, req datasource.ReadRequest
 			Server:         boolValue(cfg.Server),
 			State:          stringValue(cfg.State),
 			Type:           stringValue(cfg.Type),
+			Tags:           tags,
 		}
 	}
 	setVal, diags := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: configSummaryAttrTypes}, models)

@@ -108,6 +108,63 @@ The provider uses the same provider address and resource configuration in OpenTo
 can be released once the catalog API and tag permission parsing are deployed on every API instance; it
 does not depend on config assignment/filter support or dashboard feature flags.
 
+## Assigning config tags by name
+
+The `tags` attribute on `configdirector_config` is an unordered set of names from the config's project.
+Use a managed tag's `.name` to make Terraform or OpenTofu wait for its creation or rename:
+
+```hcl
+resource "configdirector_tag" "payments" {
+  project_id = configdirector_project.example.id
+  name       = "Payments / EU & US"
+}
+
+resource "configdirector_config" "checkout" {
+  project_id    = configdirector_project.example.id
+  key           = "checkout-enabled"
+  role          = "flag"
+  lifetime      = "temporary"
+  type          = "boolean"
+  initial_value = false
+  tags          = [configdirector_tag.payments.name]
+}
+```
+
+Existing literal names work too, for example `tags = ["Payments / EU & US"]`. The provider resolves names
+through the API's authoritative matching rules, including trimming and case equivalence. Spaces, slashes,
+and punctuation are literal; do not URL-encode them. Unknown names fail with the name and project in the
+diagnostic. Create the catalog entry first; assignments never create tags implicitly. Unknown resource
+name references stay unknown during planning and are resolved when their values become available.
+
+| Configuration | Assignment ownership |
+| --- | --- |
+| Omit `tags`, or set it to `null` | Observe assigned names and preserve remote assignments, including after import and during unrelated updates |
+| `tags = []` | Own an empty selection and clear every assignment |
+| `tags = ["Payments", "Checkout"]` | Own that selection and correct assignment drift |
+
+Removing `tags` relinquishes assignment ownership without clearing the selection. Omission is determined
+from configuration, so names adopted into state never become managed input. Older requests that omit tags
+continue preserving assignments. Omitted tags on creation produce an untagged config. A config can have
+at most 20 distinct project tags. Equivalent spellings
+resolve to the same ID and do not create duplicate assignments. State preserves declared spelling while
+the assigned tag IDs are unchanged, so casing and order alone do not produce inconsistent state or repeated drift.
+Shared tag deletion removes assignments; a declared name that no longer exists fails on the next write.
+
+Name resolution needs `tags:read`. Config reads need `configs:read`; assignment updates need
+`config-settings:update`; tagged creation needs both `configs:create` and `config-settings:update`.
+Provider updates also read the config back, so the token needs `configs:read` for that step.
+Omitted and empty selections need no catalog lookup. Managing catalog entries separately needs the tag
+resource scopes described above. A missing scope is an error; the provider does not silently skip tags.
+
+Import the config using its existing `<project_id_or_slug>/<key>` identifier. Refresh observes its current
+assignments. Leave `tags` omitted to preserve them, or declare a set to take ownership. Both
+`data.configdirector_config` and each member of `data.configdirector_configs.configs` expose current
+assigned names in `tags`, under `configs:read` alone. No standalone tag lookup data source is needed.
+
+These examples work with the same provider address in Terraform and OpenTofu. Assignment support can be
+released after the catalog and assignment APIs are deployed on every API instance; it does not depend on
+config table filters or dashboard feature flags.
+
 ## Developing the provider
 
 ```sh
@@ -118,14 +175,24 @@ make vet
 ```
 
 Acceptance tests run against a real ConfigDirector API, creating and destroying test resources. They are
-gated behind `TF_ACC`. Tag tests call the Terraform Plugin Framework lifecycle and import methods directly,
-without invoking Terraform plan/apply. Local tag validation tests run without an API token.
+gated behind `TF_ACC`. Tag catalog tests call framework lifecycle/import methods, and config tag tests use
+the framework's public provider protocol, including lifecycle/import and data-source reads. Neither invokes
+Terraform CLI plan/apply. Local validation and unknown-reference tests run without an API token. Local
+permission tests use HTTP stubs to deny catalog access, verify required-scope diagnostics, and check
+omitted versus empty assignment requests through the same public provider protocol.
 
 To run the tag API tests, set `CONFIGDIRECTOR_TOKEN` with the tag and project scopes above:
 
 ```sh
 TF_ACC=1 go test ./internal/provider -run '^TestAccTagResource_' -count=1 -v
+TF_ACC=1 go test ./internal/provider -run '^TestAccConfigTags_' -count=1 -v
 ```
+
+Config tag operations hold temporary name arrays and ID maps bounded by the number and total byte length
+of declared spellings, then release them when the operation returns. Resource private state stores those
+spellings grouped under at most 20 accepted tag IDs; equivalent names can share an ID, so the spelling
+bound is the configured selection's size. Each successful write replaces it, an omitted selection on a
+write clears it, and deleting the resource removes it. No process cache accumulates tag names.
 
 The existing acceptance harness for other resources invokes Terraform plan/apply, so do not run it where
 those commands are prohibited. Where permitted, set `CONFIGDIRECTOR_TOKEN` and run:

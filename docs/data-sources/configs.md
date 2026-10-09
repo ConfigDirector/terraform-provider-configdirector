@@ -36,6 +36,12 @@ resource "configdirector_config" "example" {
   lifetime      = "temporary"
   type          = "boolean"
   initial_value = false
+  tags          = [configdirector_tag.payments.name]
+}
+
+resource "configdirector_tag" "payments" {
+  project_id = configdirector_project.example.id
+  name       = "Payments"
 }
 
 data "configdirector_configs" "all" {
@@ -45,6 +51,10 @@ data "configdirector_configs" "all" {
 
 output "config_keys" {
   value = [for c in data.configdirector_configs.all.configs : c.key]
+}
+
+output "assigned_tag_names" {
+  value = { for c in data.configdirector_configs.all.configs : c.key => c.tags }
 }
 ```
 
@@ -74,6 +84,7 @@ Read-Only:
 - `role` (String)
 - `server` (Boolean)
 - `state` (String)
+- `tags` (Set of String) Current assigned tag names. Included under configs:read without requiring tags:read.
 - `type` (String)
 
 <a id="nestedatt--configs--deprecated_keys"></a>

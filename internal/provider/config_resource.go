@@ -63,6 +63,7 @@ type ConfigResourceModel struct {
 	Variations     types.Dynamic `tfsdk:"variations"`
 	DeprecatedKeys types.List    `tfsdk:"deprecated_keys"`
 	InitialValue   types.Dynamic `tfsdk:"initial_value"`
+	Tags           types.Set     `tfsdk:"tags"`
 }
 
 func (r *ConfigResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -72,6 +73,15 @@ func (r *ConfigResource) Metadata(ctx context.Context, req resource.MetadataRequ
 func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"tags": schema.SetAttribute{
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Unordered assigned tag names, resolved within this project's catalog. Omit to preserve remote assignments after import, during unrelated updates, or when relinquishing ownership; set [] to clear all. " +
+					"An explicit nonempty set detects and corrects assignment drift. Names must already exist; assignment never creates tags. Reference configdirector_tag.<name>.name for creation and rename ordering. " +
+					"Equivalent names share one assignment and retain configured spelling while the assigned tag IDs are unchanged. Resolution requires tags:read; updates require config-settings:update; tagged creation also requires configs:create. " +
+					"Reads and data sources show assigned names under configs:read alone. Available after the catalog and assignment APIs are deployed, independently of dashboard flags or config filters.",
+			},
 			"id": schema.StringAttribute{
 				Computed:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
@@ -265,7 +275,7 @@ func (r *ConfigResource) Configure(ctx context.Context, req resource.ConfigureRe
 
 // configToModel populates every field except InitialValue, which the
 // API never returns; callers must set/preserve it separately.
-func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel) error {
+func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel, assignments configTagAssignments) error {
 	m.Id = stringValue(c.ID)
 	m.ProjectId = stringValue(c.ProjectID)
 	m.Key = stringValue(c.Key)
@@ -276,6 +286,11 @@ func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel
 	m.State = stringValue(c.State)
 	m.Client = boolValue(c.Client)
 	m.Server = boolValue(c.Server)
+	tags, tagDiags := assignments.names(ctx, c.Tags)
+	if tagDiags.HasError() {
+		return fmt.Errorf("%v", tagDiags)
+	}
+	m.Tags = tags
 
 	typeOptions, err := dynamicFromJSON(c.TypeOptions)
 	if err != nil {
@@ -324,6 +339,11 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	server := plan.Server.ValueBool()
 	clientFlag := plan.Client.ValueBool()
+	assignments, tagDiags := configTagsForWrite(ctx, r.client, plan.ProjectId.ValueString(), req.Config, plan.Tags)
+	resp.Diagnostics.Append(tagDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	cfg, err := r.client.CreateConfig(ctx, plan.ProjectId.ValueString(), client.CreateConfigRequest{
 		Key:          plan.Key.ValueString(),
 		Description:  stringPtrFromValue(plan.Description),
@@ -335,18 +355,20 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		Client:       &clientFlag,
 		Variations:   variations,
 		DefaultValue: defaultVal,
+		TagIDs:       assignments.ids,
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error Creating Config", err.Error())
+		resp.Diagnostics.AddError("Error Creating Config", assignments.creationError(err))
 		return
 	}
 
-	if err := configToModel(ctx, cfg, &plan); err != nil {
+	if err := configToModel(ctx, cfg, &plan, assignments); err != nil {
 		resp.Diagnostics.AddError("Error Processing Config Response", err.Error())
 		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.Append(assignments.save(ctx, resp.Private)...)
 }
 
 func (r *ConfigResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -367,7 +389,12 @@ func (r *ConfigResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	if err := configToModel(ctx, cfg, &state); err != nil {
+	assignments, tagDiags := configTagsFromPrivateState(ctx, req.Private)
+	resp.Diagnostics.Append(tagDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if err := configToModel(ctx, cfg, &state, assignments); err != nil {
 		resp.Diagnostics.AddError("Error Processing Config Response", err.Error())
 		return
 	}
@@ -399,6 +426,11 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	assignments, tagDiags := configTagsForWrite(ctx, r.client, plan.ProjectId.ValueString(), req.Config, plan.Tags)
+	resp.Diagnostics.Append(tagDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	cfg, err := r.client.UpdateConfig(ctx, plan.ProjectId.ValueString(), state.Key.ValueString(), client.UpdateConfigRequest{
 		Key:         plan.Key.ValueString(),
 		Description: stringPtrFromValue(plan.Description),
@@ -409,18 +441,20 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		Variations:  variations,
 		Server:      plan.Server.ValueBool(),
 		Client:      plan.Client.ValueBool(),
+		TagIDs:      assignments.ids,
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error Updating Config", err.Error())
+		resp.Diagnostics.AddError("Error Updating Config", configWriteError(err, "config-settings:update and configs:read"))
 		return
 	}
 
-	if err := configToModel(ctx, cfg, &plan); err != nil {
+	if err := configToModel(ctx, cfg, &plan, assignments); err != nil {
 		resp.Diagnostics.AddError("Error Processing Config Response", err.Error())
 		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.Append(assignments.save(ctx, resp.Private)...)
 }
 
 func (r *ConfigResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

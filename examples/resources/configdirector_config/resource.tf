@@ -14,6 +14,11 @@ resource "configdirector_project" "example" {
   slug = "config-example"
 }
 
+resource "configdirector_tag" "payments" {
+  project_id = configdirector_project.example.id
+  name       = "Payments / EU & US"
+}
+
 # A simple boolean flag - the most common case.
 resource "configdirector_config" "new_checkout_flow" {
   project_id  = configdirector_project.example.id
@@ -22,6 +27,7 @@ resource "configdirector_config" "new_checkout_flow" {
   role        = "flag"
   lifetime    = "temporary"
   type        = "boolean"
+  tags        = [configdirector_tag.payments.name]
 
   # Write-only: the API never returns a config's default value, and
   # changing it after creation is a no-op - it can only be set at create
@@ -42,6 +48,7 @@ resource "configdirector_config" "maintenance_mode" {
   type        = "boolean"
   client      = true
   server      = true
+  tags        = []
 
   initial_value = false
 }

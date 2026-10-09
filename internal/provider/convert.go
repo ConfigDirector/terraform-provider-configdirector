@@ -144,9 +144,11 @@ type configSummaryModel struct {
 	Server         types.Bool   `tfsdk:"server"`
 	State          types.String `tfsdk:"state"`
 	Type           types.String `tfsdk:"type"`
+	Tags           types.Set    `tfsdk:"tags"`
 }
 
 var configSummaryAttrTypes = map[string]attr.Type{
+	"tags":            types.SetType{ElemType: types.StringType},
 	"client":          types.BoolType,
 	"deprecated_keys": types.ListType{ElemType: types.ObjectType{AttrTypes: deprecatedKeyAttrTypes}},
 	"description":     types.StringType,

@@ -29,6 +29,11 @@ resource "configdirector_project" "example" {
   slug = "config-example"
 }
 
+resource "configdirector_tag" "payments" {
+  project_id = configdirector_project.example.id
+  name       = "Payments / EU & US"
+}
+
 # A simple boolean flag - the most common case.
 resource "configdirector_config" "new_checkout_flow" {
   project_id  = configdirector_project.example.id
@@ -37,6 +42,7 @@ resource "configdirector_config" "new_checkout_flow" {
   role        = "flag"
   lifetime    = "temporary"
   type        = "boolean"
+  tags        = [configdirector_tag.payments.name]
 
   # Write-only: the API never returns a config's default value, and
   # changing it after creation is a no-op - it can only be set at create
@@ -57,6 +63,7 @@ resource "configdirector_config" "maintenance_mode" {
   type        = "boolean"
   client      = true
   server      = true
+  tags        = []
 
   initial_value = false
 }
@@ -140,6 +147,7 @@ resource "configdirector_config" "pricing_experiment" {
 - `client` (Boolean)
 - `description` (String)
 - `server` (Boolean)
+- `tags` (Set of String) Unordered assigned tag names, resolved within this project's catalog. Omit to preserve remote assignments after import, during unrelated updates, or when relinquishing ownership; set [] to clear all. An explicit nonempty set detects and corrects assignment drift. Names must already exist; assignment never creates tags. Reference configdirector_tag.<name>.name for creation and rename ordering. Equivalent names share one assignment and retain configured spelling while the assigned tag IDs are unchanged. Resolution requires tags:read; updates require config-settings:update; tagged creation also requires configs:create. Reads and data sources show assigned names under configs:read alone. Available after the catalog and assignment APIs are deployed, independently of dashboard flags or config filters.
 - `type_options` (Dynamic) Type-specific options for this config, shaped differently depending on "type" (e.g. min/max for integer/float, values for enum, unit for timespan). Not validated by Terraform - the structure you provide is passed through as-is and validated by the API.
 - `variations` (Dynamic) Per-variation values for this config, as a list of {name, value} objects. Only valid when role is "experiment"; the API rejects it (and this provider validates it client-side) for any other role. Not validated by Terraform beyond that - the structure you provide is passed through as-is and validated by the API.
 

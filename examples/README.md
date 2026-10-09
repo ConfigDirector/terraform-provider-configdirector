@@ -11,7 +11,7 @@ get pulled directly into the generated provider docs.
   - [configdirector_project](resources/configdirector_project/resource.tf)
   - [configdirector_environment](resources/configdirector_environment/resource.tf)
   - [configdirector_config](resources/configdirector_config/resource.tf) -
-    several role/type/type_options combinations
+    several role/type/type_options combinations, tag-name dependencies, and an explicit empty tag selection
   - [configdirector_config_targeting_rules](resources/configdirector_config_targeting_rules/resource.tf) -
     multiple configs, each with conditional and percentage-based targeting
     rules across environments
@@ -72,6 +72,15 @@ needed by its project resource. Tag imports use a project UUID or slug followed 
 quote names containing spaces or punctuation, and leave additional slashes and percent sequences unchanged.
 Project slug imports additionally need `projects:read`. See the [tag catalog guide](../README.md#managing-the-tag-catalog-with-terraform-or-opentofu)
 for lifecycle behavior and both import commands.
+
+The config resource's `tags` is an unordered set of existing project tag names. A managed tag's `.name`
+reference orders creation and renames; literal names use the API's case-equivalent matching. Omit `tags`
+to preserve assignments after import, during unrelated updates, or after relinquishing ownership. Use
+`tags = []` to clear all, or a nonempty set to reconcile assignment drift. Equivalent spellings share one
+assignment and retain declared spelling in state. Resolution needs `tags:read`; tagged creation needs
+`configs:create` and `config-settings:update`; updates need `config-settings:update`.
+Both config data sources expose current assigned names under `configs:read` alone. See the
+[config tag guide](../README.md#assigning-config-tags-by-name) for import, errors, and rollout requirements.
 
 ## Testing against a local, unreleased build
 

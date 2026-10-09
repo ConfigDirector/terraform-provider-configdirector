@@ -33,6 +33,7 @@ type ConfigDataSourceModel struct {
 	Client         types.Bool   `tfsdk:"client"`
 	Server         types.Bool   `tfsdk:"server"`
 	DeprecatedKeys types.List   `tfsdk:"deprecated_keys"`
+	Tags           types.Set    `tfsdk:"tags"`
 }
 
 func (d *ConfigDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -42,6 +43,11 @@ func (d *ConfigDataSource) Metadata(ctx context.Context, req datasource.Metadata
 func (d *ConfigDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"tags": schema.SetAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				Description: "Current assigned tag names. Included under configs:read without requiring tags:read.",
+			},
 			"key": schema.StringAttribute{
 				Required:    true,
 				Description: "Key of the config to look up.",
@@ -108,6 +114,12 @@ func (d *ConfigDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	state.State = stringValue(cfg.State)
 	state.Client = boolValue(cfg.Client)
 	state.Server = boolValue(cfg.Server)
+	tags, tagDiags := (configTagAssignments{}).names(ctx, cfg.Tags)
+	resp.Diagnostics.Append(tagDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	state.Tags = tags
 
 	keysList, diags := deprecatedKeysListValue(ctx, cfg.DeprecatedKeys)
 	resp.Diagnostics.Append(diags...)
