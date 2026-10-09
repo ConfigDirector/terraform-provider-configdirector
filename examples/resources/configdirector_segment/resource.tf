@@ -51,7 +51,7 @@ resource "configdirector_segment" "beta_testers" {
         attribute    = "traits"
         trait        = "/betaOptIn"
         operator     = "equals"
-        targetType   = "text"
+        targetType   = "boolean"
         targetValues = ["true"]
       },
       {
