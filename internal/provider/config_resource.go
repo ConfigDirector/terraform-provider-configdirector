@@ -80,7 +80,7 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Description: "Unordered assigned tag names, resolved within this project's catalog. Omit to preserve remote assignments after import, during unrelated updates, or when relinquishing ownership; set [] to clear all. " +
 					"An explicit nonempty set detects and corrects assignment drift. Names must already exist; assignment never creates tags. Reference configdirector_tag.<name>.name for creation and rename ordering. " +
 					"Equivalent names share one assignment and retain configured spelling while the assigned tag IDs are unchanged. Resolving names requires tags:read; creating a config, tagged or not, requires configs:create; changing assignments requires config-settings:update. " +
-					"Reads and data sources show assigned names under configs:read alone. Available after the catalog and assignment APIs are deployed, independently of dashboard flags or config filters.",
+					"Reads and data sources show assigned names under configs:read alone.",
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,

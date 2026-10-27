@@ -104,9 +104,7 @@ This resource manages catalog entries; config tag assignments and a standalone t
 its scope.
 
 The provider uses the same provider address and resource configuration in OpenTofu. See the
-[tag example](examples/resources/configdirector_tag/resource.tf) for a complete configuration. This resource
-can be released once the catalog API and tag permission parsing are deployed on every API instance; it
-does not depend on config assignment/filter support or dashboard feature flags.
+[tag example](examples/resources/configdirector_tag/resource.tf) for a complete configuration.
 
 ## Assigning config tags by name
 
@@ -161,9 +159,7 @@ assignments. Leave `tags` omitted to preserve them, or declare a set to take own
 `data.configdirector_config` and each member of `data.configdirector_configs.configs` expose current
 assigned names in `tags`, under `configs:read` alone. No standalone tag lookup data source is needed.
 
-These examples work with the same provider address in Terraform and OpenTofu. Assignment support can be
-released after the catalog and assignment APIs are deployed on every API instance; it does not depend on
-config table filters or dashboard feature flags.
+These examples work with the same provider address in Terraform and OpenTofu.
 
 ## Developing the provider
 

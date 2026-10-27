@@ -80,7 +80,7 @@ to preserve assignments after import, during unrelated updates, or after relinqu
 assignment and retain declared spelling in state. Resolving names needs `tags:read`; creating a
 config, tagged or not, needs `configs:create`; changing assignments needs `config-settings:update`.
 Both config data sources expose current assigned names under `configs:read` alone. See the
-[config tag guide](../README.md#assigning-config-tags-by-name) for import, errors, and rollout requirements.
+[config tag guide](../README.md#assigning-config-tags-by-name) for import and errors.
 
 ## Testing against a local, unreleased build
 
