@@ -102,22 +102,6 @@ func (assignments configTagAssignments) save(ctx context.Context, private config
 	return private.SetKey(ctx, "config_tag_names", encoded)
 }
 
-func (assignments configTagAssignments) creationError(err error) string {
-	permissions := "configs:create"
-	if assignments.ids != nil && len(*assignments.ids) > 0 {
-		permissions += " and config-settings:update"
-	}
-	return configWriteError(err, permissions)
-}
-
-func configWriteError(err error, permissions string) string {
-	var apiError *client.APIError
-	if !errors.As(err, &apiError) || apiError.StatusCode != 403 {
-		return err.Error()
-	}
-	return fmt.Sprintf("%s. This operation requires %s for this project.", err, permissions)
-}
-
 func configTagsFromPrivateState(ctx context.Context, private configTagPrivateState) (configTagAssignments, diag.Diagnostics) {
 	encoded, diagnostics := private.GetKey(ctx, "config_tag_names")
 	var assignments configTagAssignments

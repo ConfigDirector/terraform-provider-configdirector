@@ -94,7 +94,7 @@ func TestConfigTags_missingCatalogReadScope(t *testing.T) {
 	}
 }
 
-func TestConfigTags_taggedCreationExplainsConfigScopes(t *testing.T) {
+func TestConfigTags_taggedCreationExplainsOnlyCreateScope(t *testing.T) {
 	fixture := newConfigTagsHTTPTest(t, func(w http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet && request.URL.Path == configTagsHTTPLookup {
 			configTagsHTTPJSON(w, http.StatusOK, configTagsHTTPTag)
@@ -107,8 +107,8 @@ func TestConfigTags_taggedCreationExplainsConfigScopes(t *testing.T) {
 	diagnostics := fixture.rejectedChange(t, configTagsState{}, configuration)
 
 	detail := configTagsErrorDetail(t, diagnostics)
-	if !strings.Contains(detail, "configs:create") || !strings.Contains(detail, "config-settings:update") {
-		t.Fatalf("tagged creation diagnostic must identify both required config scopes: %s", detail)
+	if !strings.Contains(detail, "configs:create") || strings.Contains(detail, "config-settings:update") {
+		t.Fatalf("tagged creation must require only configs:create: %s", detail)
 	}
 }
 

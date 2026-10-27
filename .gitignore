@@ -11,3 +11,4 @@ scratchpad/
 crash.log
 crash.*.log
 .vscode
+.DS_Store

@@ -77,8 +77,8 @@ The config resource's `tags` is an unordered set of existing project tag names. 
 reference orders creation and renames; literal names use the API's case-equivalent matching. Omit `tags`
 to preserve assignments after import, during unrelated updates, or after relinquishing ownership. Use
 `tags = []` to clear all, or a nonempty set to reconcile assignment drift. Equivalent spellings share one
-assignment and retain declared spelling in state. Resolution needs `tags:read`; tagged creation needs
-`configs:create` and `config-settings:update`; updates need `config-settings:update`.
+assignment and retain declared spelling in state. Resolving names needs `tags:read`; creating a
+config, tagged or not, needs `configs:create`; changing assignments needs `config-settings:update`.
 Both config data sources expose current assigned names under `configs:read` alone. See the
 [config tag guide](../README.md#assigning-config-tags-by-name) for import, errors, and rollout requirements.
 

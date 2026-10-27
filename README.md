@@ -150,8 +150,8 @@ resolve to the same ID and do not create duplicate assignments. State preserves 
 the assigned tag IDs are unchanged, so casing and order alone do not produce inconsistent state or repeated drift.
 Shared tag deletion removes assignments; a declared name that no longer exists fails on the next write.
 
-Name resolution needs `tags:read`. Config reads need `configs:read`; assignment updates need
-`config-settings:update`; tagged creation needs both `configs:create` and `config-settings:update`.
+Resolving names needs `tags:read`. Config reads need `configs:read`; creating a config, tagged or not,
+needs `configs:create`; changing assignments needs `config-settings:update`.
 Provider updates also read the config back, so the token needs `configs:read` for that step.
 Omitted and empty selections need no catalog lookup. Managing catalog entries separately needs the tag
 resource scopes described above. A missing scope is an error; the provider does not silently skip tags.

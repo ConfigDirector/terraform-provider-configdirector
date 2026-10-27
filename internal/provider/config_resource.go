@@ -79,7 +79,7 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				ElementType: types.StringType,
 				Description: "Unordered assigned tag names, resolved within this project's catalog. Omit to preserve remote assignments after import, during unrelated updates, or when relinquishing ownership; set [] to clear all. " +
 					"An explicit nonempty set detects and corrects assignment drift. Names must already exist; assignment never creates tags. Reference configdirector_tag.<name>.name for creation and rename ordering. " +
-					"Equivalent names share one assignment and retain configured spelling while the assigned tag IDs are unchanged. Resolution requires tags:read; updates require config-settings:update; tagged creation also requires configs:create. " +
+					"Equivalent names share one assignment and retain configured spelling while the assigned tag IDs are unchanged. Resolving names requires tags:read; creating a config, tagged or not, requires configs:create; changing assignments requires config-settings:update. " +
 					"Reads and data sources show assigned names under configs:read alone. Available after the catalog and assignment APIs are deployed, independently of dashboard flags or config filters.",
 			},
 			"id": schema.StringAttribute{
@@ -358,7 +358,7 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		TagIDs:       assignments.ids,
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Error Creating Config", assignments.creationError(err))
+		resp.Diagnostics.AddError("Error Creating Config", configWriteError(err, "configs:create"))
 		return
 	}
 
@@ -502,4 +502,12 @@ func (r *ConfigResource) ImportState(ctx context.Context, req resource.ImportSta
 			"since the API still has no endpoint to set it after creation - so make sure it's set to the value "+
 			"you actually want treated as the baseline going forward before that apply runs.",
 	)
+}
+
+func configWriteError(err error, permissions string) string {
+	var apiError *client.APIError
+	if !errors.As(err, &apiError) || apiError.StatusCode != 403 {
+		return err.Error()
+	}
+	return fmt.Sprintf("%s. This operation requires %s for this project.", err, permissions)
 }
