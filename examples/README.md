@@ -20,6 +20,11 @@ get pulled directly into the generated provider docs.
     a targeting rule through a segment condition
   - [configdirector_tag](resources/configdirector_tag/resource.tf) -
     a shared project tag with spaces and punctuation in its name
+  - [configdirector_webhook](resources/configdirector_webhook/resource.tf) -
+    a webhook filtered to a project's production environment, with a custom
+    header and its signing secret passed to a receiver module, and a webhook
+    that receives only alert events. The configuration asks for `ci_token`,
+    the header value, when you plan it
 - `data-sources/<data_source_type>/data-source.tf` - one directory per data
   source, each creating whatever resource(s) it needs to look up:
   - [configdirector_project](data-sources/configdirector_project/data-source.tf)

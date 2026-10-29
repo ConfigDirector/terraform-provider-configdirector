@@ -30,29 +30,52 @@ var legacyTestProjectSlugs = []string{"test-project", "renamed-project", "projec
 func TestMain(m *testing.M) {
 	if os.Getenv("TF_ACC") != "" && os.Getenv("CONFIGDIRECTOR_TOKEN") != "" {
 		deleteLeftoverTestProjects()
+		deleteLeftoverTestWebhooks()
 	}
 	os.Exit(m.Run())
 }
 
+func deleteLeftoverTestWebhooks() {
+	ctx := context.Background()
+	api := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
+
+	webhooks, err := api.ListWebhooks(ctx)
+	if err != nil {
+		log.Printf("listing webhooks to find leftover test webhooks: %s", err)
+		return
+	}
+
+	for _, webhook := range webhooks {
+		if !strings.HasPrefix(webhook.Name, testAccWebhookNamePrefix) {
+			continue
+		}
+		if err := api.DeleteWebhook(ctx, webhook.ID); err != nil {
+			log.Printf("deleting leftover test webhook %q (%s): %s", webhook.Name, webhook.ID, err)
+			continue
+		}
+		log.Printf("deleted leftover test webhook %q (%s)", webhook.Name, webhook.ID)
+	}
+}
+
 func deleteLeftoverTestProjects() {
 	ctx := context.Background()
-	c := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
+	api := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
 
-	projects, err := c.ListProjects(ctx)
+	projects, err := api.ListProjects(ctx)
 	if err != nil {
 		log.Printf("listing projects to find leftover test projects: %s", err)
 		return
 	}
 
-	for _, p := range projects {
-		if !isTestProjectSlug(p.Slug) {
+	for _, project := range projects {
+		if !isTestProjectSlug(project.Slug) {
 			continue
 		}
-		if err := c.DeleteProject(ctx, p.ID); err != nil {
-			log.Printf("deleting leftover test project %q (%s): %s", p.Slug, p.ID, err)
+		if err := api.DeleteProject(ctx, project.ID); err != nil {
+			log.Printf("deleting leftover test project %q (%s): %s", project.Slug, project.ID, err)
 			continue
 		}
-		log.Printf("deleted leftover test project %q (%s)", p.Slug, p.ID)
+		log.Printf("deleted leftover test project %q (%s)", project.Slug, project.ID)
 	}
 }
 
@@ -68,11 +91,11 @@ type testAccProject struct {
 func newTestAccProject(t *testing.T) testAccProject {
 	t.Helper()
 
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
+	randomBytes := make([]byte, 4)
+	if _, err := rand.Read(randomBytes); err != nil {
 		t.Fatalf("generating test project suffix: %s", err)
 	}
-	suffix := hex.EncodeToString(b)
+	suffix := hex.EncodeToString(randomBytes)
 
 	return testAccProject{
 		Name: "TF Acc " + suffix,
@@ -80,13 +103,13 @@ func newTestAccProject(t *testing.T) testAccProject {
 	}
 }
 
-func (p testAccProject) config(label string) string {
+func (project testAccProject) config(label string) string {
 	return fmt.Sprintf(`
 resource "configdirector_project" %q {
   name = %q
   slug = %q
 }
-`, label, p.Name, p.Slug)
+`, label, project.Name, project.Slug)
 }
 
 // testAccPreCheck is run by every acceptance test's PreCheck. These tests
@@ -114,8 +137,8 @@ func testAccPreCheck(t *testing.T) {
 // this mirrors the same fallback the provider itself applies in Configure,
 // rather than assuming the env var is always set.
 func testAccBaseURL() string {
-	if v := os.Getenv("CONFIGDIRECTOR_BASE_URL"); v != "" {
-		return v
+	if baseURL := os.Getenv("CONFIGDIRECTOR_BASE_URL"); baseURL != "" {
+		return baseURL
 	}
 	return defaultBaseUrl
 }

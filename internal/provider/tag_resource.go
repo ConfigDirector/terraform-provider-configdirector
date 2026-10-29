@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"unicode"
 	"unicode/utf16"
 
 	"github.com/google/uuid"
@@ -71,12 +70,12 @@ func (r *tagResource) Configure(ctx context.Context, req resource.ConfigureReque
 	if req.ProviderData == nil {
 		return
 	}
-	c, ok := req.ProviderData.(*client.Client)
-	if !ok {
+	api, isClient := req.ProviderData.(*client.Client)
+	if !isClient {
 		resp.Diagnostics.AddError("Unexpected Resource Configure Type", fmt.Sprintf("expected *client.Client, got: %T", req.ProviderData))
 		return
 	}
-	r.client = c
+	r.client = api
 }
 
 func (r *tagResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
@@ -87,7 +86,7 @@ func (r *tagResource) ValidateConfig(ctx context.Context, req resource.ValidateC
 	}
 
 	length := 0
-	for _, character := range trimTagName(name.ValueString()) {
+	for _, character := range trimJavaScriptWhitespace(name.ValueString()) {
 		length += utf16.RuneLen(character)
 		if length > 50 {
 			break
@@ -101,10 +100,7 @@ func (r *tagResource) ValidateConfig(ctx context.Context, req resource.ValidateC
 func tagToModel(tag *client.Tag, model *tagModel) {
 	model.Id = stringValue(tag.ID)
 	model.ProjectId = stringValue(tag.ProjectID)
-	preservesDeclaredName := !model.Name.IsNull() && !model.Name.IsUnknown() && trimTagName(model.Name.ValueString()) == tag.Name
-	if !preservesDeclaredName {
-		model.Name = stringValue(tag.Name)
-	}
+	model.Name = declaredOrSaved(model.Name, tag.Name)
 }
 
 func (r *tagResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -183,7 +179,7 @@ func (r *tagResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 func (r *tagResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	project, name, found := strings.Cut(req.ID, "/")
-	if !found || project == "" || trimTagName(name) == "" {
+	if !found || project == "" || trimJavaScriptWhitespace(name) == "" {
 		resp.Diagnostics.AddError("Unexpected Import Identifier", fmt.Sprintf("Expected import identifier with format: project_id_or_slug/tag_name. Got: %q", req.ID))
 		return
 	}
@@ -225,10 +221,4 @@ func tagOperationError(err error, permission string) string {
 		}
 	}
 	return err.Error()
-}
-
-func trimTagName(name string) string {
-	return strings.TrimFunc(name, func(character rune) bool {
-		return character == '\ufeff' || (character != '\u0085' && unicode.IsSpace(character))
-	})
 }

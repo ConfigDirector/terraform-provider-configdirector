@@ -6,7 +6,7 @@
 
 This is the official Terraform provider for [ConfigDirector](https://www.configdirector.com), remote config and
 feature flags with typed values, JSON Schema validation, and safe renames of live flags. It manages projects,
-environments, configs, segments, tags, and targeting rules as Terraform resources.
+environments, configs, segments, tags, targeting rules, and webhooks as Terraform resources.
 
 ## Requirements
 
@@ -161,6 +161,39 @@ assigned names in `tags`, under `configs:read` alone. No standalone tag lookup d
 
 These examples work with the same provider address in Terraform and OpenTofu.
 
+## Managing webhooks with Terraform or OpenTofu
+
+Use `configdirector_webhook` to send a signed HTTPS request to your own URL whenever something changes in the
+organization or an alert is raised or resolved. Pass its sensitive `secret` to the receiver so it can verify each
+request:
+
+```hcl
+resource "configdirector_webhook" "ci" {
+  name        = "CI pipeline"
+  url         = "https://example.com/configdirector-webhooks"
+  project_ids = [configdirector_project.example.id]
+  headers = {
+    Authorization = "Bearer ${var.ci_token}"
+  }
+}
+
+module "ci_receiver" {
+  source         = "./ci-receiver"
+  signing_secret = configdirector_webhook.ci.secret
+}
+```
+
+A webhook receives every change event type unless `event_types` lists some, and no alert events unless
+`alert_kinds` lists some. Set `event_types = []` for a webhook that receives only alert events. Empty
+`project_ids`, `environment_ids`, and `tag_ids` filters let everything through.
+
+ConfigDirector never returns header values, so Terraform notices a header added or removed outside Terraform
+but not a value changed there. Import uses the webhook's ID; the first apply after an import writes the header
+values the configuration declares. The secret stays the same across updates, and a rotation in the dashboard
+reaches the state on the next refresh. The API token needs `webhooks:manage`, which only owners and admins can
+grant. See the [webhook resource reference](docs/resources/webhook.md) and
+[what a webhook sends](https://docs.configdirector.com/integrations/webhooks).
+
 ## Developing the provider
 
 ```sh
@@ -182,6 +215,14 @@ To run the tag API tests, set `CONFIGDIRECTOR_TOKEN` with the tag and project sc
 ```sh
 TF_ACC=1 go test ./internal/provider -run '^TestAccTagResource_' -count=1 -v
 TF_ACC=1 go test ./internal/provider -run '^TestAccConfigTags_' -count=1 -v
+```
+
+Webhook tests use the framework's public provider protocol too, without the Terraform CLI. Their local tests run
+against an HTTP stub of the Admin API. The API tests create webhooks named `tf-acc-...`, aimed at a path that
+answers 404 on the API host they test, and need a token with `webhooks:manage` and the project scopes:
+
+```sh
+TF_ACC=1 go test ./internal/provider -run '^TestAccWebhookResource_' -count=1 -v
 ```
 
 Config tag operations hold temporary name arrays and ID maps bounded by the number and total byte length
