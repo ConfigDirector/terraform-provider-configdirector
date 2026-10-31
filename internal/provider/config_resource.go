@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -20,8 +22,9 @@ import (
 )
 
 var (
-	_ resource.Resource                = &ConfigResource{}
-	_ resource.ResourceWithImportState = &ConfigResource{}
+	_ resource.Resource                     = &ConfigResource{}
+	_ resource.ResourceWithImportState      = &ConfigResource{}
+	_ resource.ResourceWithConfigValidators = &ConfigResource{}
 )
 
 func NewConfigResource() resource.Resource {
@@ -106,15 +109,25 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"role": schema.StringAttribute{
 				Required: true,
+				Description: "What the config is for: \"config\" (a general value), \"flag\" (a feature flag), \"kill-switch\" or \"experiment\". " +
+					"A flag can become a kill switch and a kill switch a flag; the config is updated in place and its lifetime follows the new role. " +
+					"Any other role change fails the plan.",
 				Validators: []validator.String{
-					stringvalidator.OneOf("config", "flag", "kill-switch", "experiment"),
+					stringvalidator.OneOf(slices.Sorted(maps.Keys(configRoles))...),
 				},
+				PlanModifiers: []planmodifier.String{roleChangesOnlyBetweenFlagAndKillSwitch{}},
 			},
 			"lifetime": schema.StringAttribute{
-				Required: true,
+				Optional: true,
+				Computed: true,
+				Description: "\"temporary\" for a config you expect to remove, which ConfigDirector tracks through its lifecycle, or \"permanent\". " +
+					"The role decides it for every role but \"config\": a flag or an experiment is always temporary and a kill switch always permanent, " +
+					"so leave it out for those; a value that contradicts the role fails the plan. " +
+					"A config with the \"config\" role needs a lifetime when it is created; leaving it out later keeps the lifetime it has.",
 				Validators: []validator.String{
 					stringvalidator.OneOf("permanent", "temporary"),
 				},
+				PlanModifiers: []planmodifier.String{lifetimeWhenLeftOut{}},
 			},
 			"type": schema.StringAttribute{
 				Required: true,
@@ -189,6 +202,10 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 		},
 	}
+}
+
+func (r *ConfigResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{lifetimeMatchesRole{}}
 }
 
 // variationsRequireExperimentRole rejects a non-null "variations" value
@@ -337,6 +354,8 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	var configuredLifetime types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("lifetime"), &configuredLifetime)...)
 	server := plan.Server.ValueBool()
 	clientFlag := plan.Client.ValueBool()
 	assignments, tagDiags := configTagsForWrite(ctx, r.client, plan.ProjectId.ValueString(), req.Config, plan.Tags)
@@ -348,7 +367,7 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		Key:          plan.Key.ValueString(),
 		Description:  stringPtrFromValue(plan.Description),
 		Role:         plan.Role.ValueString(),
-		Lifetime:     plan.Lifetime.ValueString(),
+		Lifetime:     configuredLifetime.ValueString(),
 		Type:         plan.Type.ValueString(),
 		TypeOptions:  typeOptions,
 		Server:       &server,
@@ -426,6 +445,8 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	var configuredLifetime types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("lifetime"), &configuredLifetime)...)
 	assignments, tagDiags := configTagsForWrite(ctx, r.client, plan.ProjectId.ValueString(), req.Config, plan.Tags)
 	resp.Diagnostics.Append(tagDiags...)
 	if resp.Diagnostics.HasError() {
@@ -435,7 +456,7 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		Key:         plan.Key.ValueString(),
 		Description: stringPtrFromValue(plan.Description),
 		Role:        plan.Role.ValueString(),
-		Lifetime:    plan.Lifetime.ValueString(),
+		Lifetime:    configuredLifetime.ValueString(),
 		Type:        plan.Type.ValueString(),
 		TypeOptions: typeOptions,
 		Variations:  variations,

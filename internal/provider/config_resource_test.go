@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 
 	"github.com/ConfigDirector/terraform-provider-configdirector/internal/client"
 )
@@ -59,6 +61,276 @@ resource "configdirector_config" "test" {
 					}
 					return fmt.Sprintf("%s/%s", rs.Primary.Attributes["project_id"], rs.Primary.Attributes["key"]), nil
 				},
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_killSwitchCreatedWithoutLifetimeIsPermanent(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-kill-switch-key"
+  role          = "kill-switch"
+  type          = "boolean"
+  initial_value = false
+}
+`,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectKnownValue("configdirector_config.test", tfjsonpath.New("lifetime"), knownvalue.StringExact("permanent")),
+					},
+				},
+				Check: resource.TestCheckResourceAttr("configdirector_config.test", "lifetime", "permanent"),
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_flagBecomesPermanentKillSwitchInPlace(t *testing.T) {
+	p := newTestAccProject(t)
+
+	var idBeforeUpdate string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-flag-key"
+  role          = "flag"
+  type          = "boolean"
+  initial_value = false
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("configdirector_config.test", "lifetime", "temporary"),
+					resource.TestCheckResourceAttrWith("configdirector_config.test", "id", func(value string) error {
+						idBeforeUpdate = value
+						return nil
+					}),
+				),
+			},
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-flag-key"
+  role          = "kill-switch"
+  type          = "boolean"
+  initial_value = false
+}
+`,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("configdirector_config.test", plancheck.ResourceActionUpdate),
+						plancheck.ExpectKnownValue("configdirector_config.test", tfjsonpath.New("lifetime"), knownvalue.StringExact("permanent")),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("configdirector_config.test", "role", "kill-switch"),
+					resource.TestCheckResourceAttr("configdirector_config.test", "lifetime", "permanent"),
+					resource.TestCheckResourceAttrWith("configdirector_config.test", "id", func(value string) error {
+						if value != idBeforeUpdate {
+							return fmt.Errorf("expected id to remain %q after the role change, got %q", idBeforeUpdate, value)
+						}
+						return nil
+					}),
+				),
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_killSwitchBecomesTemporaryFlagInPlace(t *testing.T) {
+	p := newTestAccProject(t)
+
+	var idBeforeUpdate string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-kill-switch-key"
+  role          = "kill-switch"
+  type          = "boolean"
+  initial_value = false
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("configdirector_config.test", "lifetime", "permanent"),
+					resource.TestCheckResourceAttrWith("configdirector_config.test", "id", func(value string) error {
+						idBeforeUpdate = value
+						return nil
+					}),
+				),
+			},
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-kill-switch-key"
+  role          = "flag"
+  type          = "boolean"
+  initial_value = false
+}
+`,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("configdirector_config.test", plancheck.ResourceActionUpdate),
+						plancheck.ExpectKnownValue("configdirector_config.test", tfjsonpath.New("lifetime"), knownvalue.StringExact("temporary")),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("configdirector_config.test", "role", "flag"),
+					resource.TestCheckResourceAttr("configdirector_config.test", "lifetime", "temporary"),
+					resource.TestCheckResourceAttrWith("configdirector_config.test", "id", func(value string) error {
+						if value != idBeforeUpdate {
+							return fmt.Errorf("expected id to remain %q after the role change, got %q", idBeforeUpdate, value)
+						}
+						return nil
+					}),
+				),
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_roleChangeOutsideFlagAndKillSwitchFailsThePlan(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-flag-key"
+  role          = "flag"
+  type          = "boolean"
+  initial_value = false
+}
+`,
+			},
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-flag-key"
+  role          = "experiment"
+  type          = "boolean"
+  initial_value = false
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Only\s+a\s+feature\s+flag\s+can\s+become\s+a\s+kill\s+switch,\s+and\s+a\s+kill\s+switch\s+a\s+feature\s+flag\.`),
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_lifetimeContradictingTheRoleFailsThePlan(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-kill-switch-key"
+  role          = "kill-switch"
+  lifetime      = "temporary"
+  type          = "boolean"
+  initial_value = false
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`A kill switch is always permanent\.`),
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_configCreatedWithoutLifetimeFailsThePlan(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-config-key"
+  role          = "config"
+  type          = "string"
+  initial_value = "classic"
+}
+`,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`A config needs a lifetime\.`),
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_configKeepsItsLifetimeWhenLeftOut(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-config-key"
+  role          = "config"
+  lifetime      = "permanent"
+  type          = "string"
+  initial_value = "classic"
+}
+`,
+			},
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-config-key"
+  description   = "Checkout theme"
+  role          = "config"
+  type          = "string"
+  initial_value = "classic"
+}
+`,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("configdirector_config.test", plancheck.ResourceActionUpdate),
+						plancheck.ExpectKnownValue("configdirector_config.test", tfjsonpath.New("lifetime"), knownvalue.StringExact("permanent")),
+					},
+				},
+				Check: resource.TestCheckResourceAttr("configdirector_config.test", "lifetime", "permanent"),
 			},
 		},
 	})

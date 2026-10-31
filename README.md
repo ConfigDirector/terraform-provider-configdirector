@@ -50,7 +50,6 @@ resource "configdirector_config" "new_checkout_flow" {
   key         = "new-checkout-flow"
   description = "Enables the redesigned checkout flow."
   role        = "flag"
-  lifetime    = "temporary"
   type        = "boolean"
 
   initial_value = false
@@ -121,7 +120,6 @@ resource "configdirector_config" "checkout" {
   project_id    = configdirector_project.example.id
   key           = "checkout-enabled"
   role          = "flag"
-  lifetime      = "temporary"
   type          = "boolean"
   initial_value = false
   tags          = [configdirector_tag.payments.name]

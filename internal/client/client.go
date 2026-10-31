@@ -297,7 +297,7 @@ type CreateConfigRequest struct {
 	Key          string      `json:"key"`
 	Description  *string     `json:"description,omitempty"`
 	Role         string      `json:"role"`
-	Lifetime     string      `json:"lifetime"`
+	Lifetime     string      `json:"lifetime,omitempty"`
 	Type         string      `json:"type"`
 	TypeOptions  any         `json:"typeOptions,omitempty"`
 	Server       *bool       `json:"server,omitempty"`

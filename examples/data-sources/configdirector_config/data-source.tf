@@ -18,7 +18,6 @@ resource "configdirector_config" "example" {
   project_id    = configdirector_project.example.id
   key           = "example-flag"
   role          = "flag"
-  lifetime      = "temporary"
   type          = "boolean"
   initial_value = false
   tags          = [configdirector_tag.payments.name]

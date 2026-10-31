@@ -86,7 +86,6 @@ resource "configdirector_config" "new_checkout_flow" {
   project_id    = configdirector_project.example.id
   key           = "new-checkout-flow"
   role          = "flag"
-  lifetime      = "temporary"
   type          = "boolean"
   initial_value = false
 }

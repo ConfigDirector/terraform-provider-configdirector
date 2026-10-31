@@ -25,7 +25,6 @@ resource "configdirector_config" "new_checkout_flow" {
   key         = "new-checkout-flow"
   description = "Enables the redesigned checkout flow."
   role        = "flag"
-  lifetime    = "temporary"
   type        = "boolean"
   tags        = [configdirector_tag.payments.name]
 
@@ -44,7 +43,6 @@ resource "configdirector_config" "maintenance_mode" {
   key         = "maintenance-mode"
   description = "Puts the app into maintenance mode when enabled."
   role        = "kill-switch"
-  lifetime    = "permanent"
   type        = "boolean"
   client      = true
   server      = true
@@ -102,7 +100,6 @@ resource "configdirector_config" "pricing_experiment" {
   project_id = configdirector_project.example.id
   key        = "pricing-experiment"
   role       = "experiment"
-  lifetime   = "temporary"
   type       = "string"
 
   variations = [

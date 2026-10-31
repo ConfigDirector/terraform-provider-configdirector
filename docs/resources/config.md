@@ -40,7 +40,6 @@ resource "configdirector_config" "new_checkout_flow" {
   key         = "new-checkout-flow"
   description = "Enables the redesigned checkout flow."
   role        = "flag"
-  lifetime    = "temporary"
   type        = "boolean"
   tags        = [configdirector_tag.payments.name]
 
@@ -59,7 +58,6 @@ resource "configdirector_config" "maintenance_mode" {
   key         = "maintenance-mode"
   description = "Puts the app into maintenance mode when enabled."
   role        = "kill-switch"
-  lifetime    = "permanent"
   type        = "boolean"
   client      = true
   server      = true
@@ -117,7 +115,6 @@ resource "configdirector_config" "pricing_experiment" {
   project_id = configdirector_project.example.id
   key        = "pricing-experiment"
   role       = "experiment"
-  lifetime   = "temporary"
   type       = "string"
 
   variations = [
@@ -137,15 +134,15 @@ resource "configdirector_config" "pricing_experiment" {
 
 - `initial_value` (Dynamic) Default value used when creating this config - a plain string, number, or bool matching "type". Despite the name, this isn't reconciled on every apply the way most attributes are: the ConfigDirector API has no endpoint that returns the global default back, so it's write-only from Terraform's perspective, sent only on create. Changing it after the config already exists never replaces the resource and never reaches the API - the stored value is pinned to whatever was set at create time. Note this only stops the *value* from drifting: Terraform will still show a pending update (and this provider will still make a no-op API call) on every plan/apply for as long as the configured value disagrees with the pinned one. Add `lifecycle { ignore_changes = [initial_value] }` on the resource to suppress that too. Ongoing default value changes go through per-environment targeting rules instead, which aren't modeled by this resource yet. Exception: right after import, there's nothing yet to pin to (import can't populate this attribute either - see ImportState), so the first apply adopts whatever's configured as the new baseline instead of conflicting with it.
 - `key` (String)
-- `lifetime` (String)
 - `project_id` (String) ID of the project this config belongs to.
-- `role` (String)
+- `role` (String) What the config is for: "config" (a general value), "flag" (a feature flag), "kill-switch" or "experiment". A flag can become a kill switch and a kill switch a flag; the config is updated in place and its lifetime follows the new role. Any other role change fails the plan.
 - `type` (String)
 
 ### Optional
 
 - `client` (Boolean)
 - `description` (String)
+- `lifetime` (String) "temporary" for a config you expect to remove, which ConfigDirector tracks through its lifecycle, or "permanent". The role decides it for every role but "config": a flag or an experiment is always temporary and a kill switch always permanent, so leave it out for those; a value that contradicts the role fails the plan. A config with the "config" role needs a lifetime when it is created; leaving it out later keeps the lifetime it has.
 - `server` (Boolean)
 - `tags` (Set of String) Unordered assigned tag names, resolved within this project's catalog. Omit to preserve remote assignments after import, during unrelated updates, or when relinquishing ownership; set [] to clear all. An explicit nonempty set detects and corrects assignment drift. Names must already exist; assignment never creates tags. Reference configdirector_tag.<name>.name for creation and rename ordering. Equivalent names share one assignment and retain configured spelling while the assigned tag IDs are unchanged. Resolving names requires tags:read; creating a config, tagged or not, requires configs:create; changing assignments requires config-settings:update. Reads and data sources show assigned names under configs:read alone.
 - `type_options` (Dynamic) Type-specific options for this config, shaped differently depending on "type" (e.g. min/max for integer/float, values for enum, unit for timespan). Not validated by Terraform - the structure you provide is passed through as-is and validated by the API.

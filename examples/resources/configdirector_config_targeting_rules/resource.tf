@@ -21,7 +21,6 @@ resource "configdirector_config" "beta_features" {
   project_id    = configdirector_project.example.id
   key           = "beta-features"
   role          = "flag"
-  lifetime      = "temporary"
   type          = "boolean"
   initial_value = false
 }
@@ -130,7 +129,6 @@ resource "configdirector_config" "checkout_button_copy" {
   project_id = configdirector_project.example.id
   key        = "checkout-button-copy"
   role       = "experiment"
-  lifetime   = "temporary"
   type       = "string"
 
   variations = [
