@@ -4,6 +4,8 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-01
+
 ### Changed
 
 - `configdirector_config` no longer requires `lifetime`. The role decides it for a flag, an experiment (both temporary) and a kill switch (permanent), so leave it out for those: the plan shows the lifetime the role decides. A lifetime that contradicts the role, such as a `kill-switch` with `lifetime = "temporary"`, now fails the plan with "A kill switch is always permanent." instead of failing the apply. A config with the `config` role still needs a lifetime when it is created, and the plan fails without one; leaving it out later keeps the lifetime it has.
