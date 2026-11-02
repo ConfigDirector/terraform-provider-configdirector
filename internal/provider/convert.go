@@ -49,31 +49,34 @@ func stringPtrFromValue(v types.String) *string {
 // embedded in a project's "environments" attribute and in the standalone
 // "environments" list data source - identical in both places.
 type environmentSummaryModel struct {
-	Color     types.String `tfsdk:"color"`
-	Id        types.String `tfsdk:"id"`
-	Live      types.Bool   `tfsdk:"live"`
-	Name      types.String `tfsdk:"name"`
-	ProjectId types.String `tfsdk:"project_id"`
-	Slug      types.String `tfsdk:"slug"`
+	Color              types.String `tfsdk:"color"`
+	DeletionProtection types.Bool   `tfsdk:"deletion_protection"`
+	Id                 types.String `tfsdk:"id"`
+	Live               types.Bool   `tfsdk:"live"`
+	Name               types.String `tfsdk:"name"`
+	ProjectId          types.String `tfsdk:"project_id"`
+	Slug               types.String `tfsdk:"slug"`
 }
 
 var environmentSummaryAttrTypes = map[string]attr.Type{
-	"color":      types.StringType,
-	"id":         types.StringType,
-	"live":       types.BoolType,
-	"name":       types.StringType,
-	"project_id": types.StringType,
-	"slug":       types.StringType,
+	"color":               types.StringType,
+	"deletion_protection": types.BoolType,
+	"id":                  types.StringType,
+	"live":                types.BoolType,
+	"name":                types.StringType,
+	"project_id":          types.StringType,
+	"slug":                types.StringType,
 }
 
 func environmentSummaryModelFromAPI(e client.Environment) environmentSummaryModel {
 	return environmentSummaryModel{
-		Color:     stringValue(e.Color),
-		Id:        stringValue(e.ID),
-		Live:      boolValue(e.Live),
-		Name:      stringValue(e.Name),
-		ProjectId: stringValue(e.ProjectID),
-		Slug:      stringValue(e.Slug),
+		Color:              stringValue(e.Color),
+		DeletionProtection: boolValue(e.DeletionProtection),
+		Id:                 stringValue(e.ID),
+		Live:               boolValue(e.Live),
+		Name:               stringValue(e.Name),
+		ProjectId:          stringValue(e.ProjectID),
+		Slug:               stringValue(e.Slug),
 	}
 }
 
@@ -117,17 +120,19 @@ func deprecatedKeysListValue(ctx context.Context, keys []client.DeprecatedKey) (
 // projectSummaryModel is the shape of a project as it appears in the
 // "projects" list data source.
 type projectSummaryModel struct {
-	Id             types.String `tfsdk:"id"`
-	Name           types.String `tfsdk:"name"`
-	OrganizationId types.String `tfsdk:"organization_id"`
-	Slug           types.String `tfsdk:"slug"`
+	DeletionProtection types.Bool   `tfsdk:"deletion_protection"`
+	Id                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	OrganizationId     types.String `tfsdk:"organization_id"`
+	Slug               types.String `tfsdk:"slug"`
 }
 
 var projectSummaryAttrTypes = map[string]attr.Type{
-	"id":              types.StringType,
-	"name":            types.StringType,
-	"organization_id": types.StringType,
-	"slug":            types.StringType,
+	"deletion_protection": types.BoolType,
+	"id":                  types.StringType,
+	"name":                types.StringType,
+	"organization_id":     types.StringType,
+	"slug":                types.StringType,
 }
 
 // configSummaryModel is the shape of a config as it appears in the "configs"

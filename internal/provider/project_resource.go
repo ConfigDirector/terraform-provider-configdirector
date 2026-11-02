@@ -32,11 +32,12 @@ type ProjectResource struct {
 }
 
 type ProjectModel struct {
-	Id             types.String `tfsdk:"id"`
-	Name           types.String `tfsdk:"name"`
-	OrganizationId types.String `tfsdk:"organization_id"`
-	Slug           types.String `tfsdk:"slug"`
-	Environments   types.Set    `tfsdk:"environments"`
+	Id                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	OrganizationId     types.String `tfsdk:"organization_id"`
+	Slug               types.String `tfsdk:"slug"`
+	DeletionProtection types.Bool   `tfsdk:"deletion_protection"`
+	Environments       types.Set    `tfsdk:"environments"`
 }
 
 func (r *ProjectResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -71,11 +72,19 @@ func (r *ProjectResource) Schema(ctx context.Context, req resource.SchemaRequest
 					stringvalidator.RegexMatches(regexp.MustCompile(`^[\da-z]+(?:[-_][\da-z]+)*$`), ""),
 				},
 			},
+			"deletion_protection": schema.BoolAttribute{
+				Computed:    true,
+				Description: resourceDeletionProtectionDescription,
+			},
 			"environments": schema.SetNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"color":      schema.StringAttribute{Computed: true},
+						"color": schema.StringAttribute{Computed: true},
+						"deletion_protection": schema.BoolAttribute{
+							Computed:    true,
+							Description: environmentDeletionProtectionDescription,
+						},
 						"id":         schema.StringAttribute{Computed: true},
 						"live":       schema.BoolAttribute{Computed: true},
 						"name":       schema.StringAttribute{Computed: true},
@@ -105,6 +114,7 @@ func projectToModel(ctx context.Context, p *client.Project, m *ProjectModel) err
 	m.Name = stringValue(p.Name)
 	m.Slug = stringValue(p.Slug)
 	m.OrganizationId = stringValue(p.OrganizationID)
+	m.DeletionProtection = boolValue(p.DeletionProtection)
 
 	envSet, diags := environmentSummarySetValue(ctx, p.Environments)
 	if diags.HasError() {

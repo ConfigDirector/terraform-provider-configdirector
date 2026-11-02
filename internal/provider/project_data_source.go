@@ -22,11 +22,12 @@ type ProjectDataSource struct {
 }
 
 type ProjectDataSourceModel struct {
-	Id             types.String `tfsdk:"id"`
-	Name           types.String `tfsdk:"name"`
-	OrganizationId types.String `tfsdk:"organization_id"`
-	Slug           types.String `tfsdk:"slug"`
-	Environments   types.Set    `tfsdk:"environments"`
+	Id                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	OrganizationId     types.String `tfsdk:"organization_id"`
+	Slug               types.String `tfsdk:"slug"`
+	DeletionProtection types.Bool   `tfsdk:"deletion_protection"`
+	Environments       types.Set    `tfsdk:"environments"`
 }
 
 func (d *ProjectDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -43,13 +44,21 @@ func (d *ProjectDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 			"name":            schema.StringAttribute{Computed: true},
 			"organization_id": schema.StringAttribute{Computed: true},
 			"slug":            schema.StringAttribute{Computed: true},
+			"deletion_protection": schema.BoolAttribute{
+				Computed:    true,
+				Description: projectDeletionProtectionDescription,
+			},
 			// A Set, not a List: see project_resource.go's "environments"
 			// attribute for why.
 			"environments": schema.SetNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"color":      schema.StringAttribute{Computed: true},
+						"color": schema.StringAttribute{Computed: true},
+						"deletion_protection": schema.BoolAttribute{
+							Computed:    true,
+							Description: environmentDeletionProtectionDescription,
+						},
 						"id":         schema.StringAttribute{Computed: true},
 						"live":       schema.BoolAttribute{Computed: true},
 						"name":       schema.StringAttribute{Computed: true},
@@ -91,6 +100,7 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	state.Name = stringValue(project.Name)
 	state.Slug = stringValue(project.Slug)
 	state.OrganizationId = stringValue(project.OrganizationID)
+	state.DeletionProtection = boolValue(project.DeletionProtection)
 
 	envSet, diags := environmentSummarySetValue(ctx, project.Environments)
 	resp.Diagnostics.Append(diags...)

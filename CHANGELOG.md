@@ -4,6 +4,10 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+### Added
+
+- `configdirector_project` and `configdirector_environment` read `deletion_protection`, which says whether deletion protection is on. It is turned on and off in the ConfigDirector dashboard, so Terraform only reads it and never plans a change to it. While it is on, destroying the project or environment fails with an error that says where to turn it off, and so does destroying a project with a protected environment. Add `lifecycle { prevent_destroy = true }` to a protected project or environment to keep Terraform from planning its destroy. The `configdirector_project`, `configdirector_projects`, `configdirector_environment` and `configdirector_environments` data sources read it too, as does each environment in a project's `environments`.
+
 ## [0.6.0] - 2026-11-01
 
 ### Changed

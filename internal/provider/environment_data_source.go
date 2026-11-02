@@ -22,12 +22,13 @@ type EnvironmentDataSource struct {
 }
 
 type EnvironmentDataSourceModel struct {
-	Id        types.String `tfsdk:"id"`
-	ProjectId types.String `tfsdk:"project_id"`
-	Name      types.String `tfsdk:"name"`
-	Slug      types.String `tfsdk:"slug"`
-	Color     types.String `tfsdk:"color"`
-	Live      types.Bool   `tfsdk:"live"`
+	Id                 types.String `tfsdk:"id"`
+	ProjectId          types.String `tfsdk:"project_id"`
+	Name               types.String `tfsdk:"name"`
+	Slug               types.String `tfsdk:"slug"`
+	Color              types.String `tfsdk:"color"`
+	Live               types.Bool   `tfsdk:"live"`
+	DeletionProtection types.Bool   `tfsdk:"deletion_protection"`
 }
 
 func (d *EnvironmentDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -49,6 +50,10 @@ func (d *EnvironmentDataSource) Schema(ctx context.Context, req datasource.Schem
 			"slug":  schema.StringAttribute{Computed: true},
 			"color": schema.StringAttribute{Computed: true},
 			"live":  schema.BoolAttribute{Computed: true},
+			"deletion_protection": schema.BoolAttribute{
+				Computed:    true,
+				Description: environmentDeletionProtectionDescription,
+			},
 		},
 	}
 }
@@ -84,6 +89,7 @@ func (d *EnvironmentDataSource) Read(ctx context.Context, req datasource.ReadReq
 	state.Color = stringValue(env.Color)
 	state.ProjectId = stringValue(env.ProjectID)
 	state.Live = boolValue(env.Live)
+	state.DeletionProtection = boolValue(env.DeletionProtection)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

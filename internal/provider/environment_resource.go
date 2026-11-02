@@ -32,12 +32,13 @@ type EnvironmentResource struct {
 }
 
 type EnvironmentModel struct {
-	Id        types.String `tfsdk:"id"`
-	Name      types.String `tfsdk:"name"`
-	Slug      types.String `tfsdk:"slug"`
-	Color     types.String `tfsdk:"color"`
-	ProjectId types.String `tfsdk:"project_id"`
-	Live      types.Bool   `tfsdk:"live"`
+	Id                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	Slug               types.String `tfsdk:"slug"`
+	Color              types.String `tfsdk:"color"`
+	ProjectId          types.String `tfsdk:"project_id"`
+	Live               types.Bool   `tfsdk:"live"`
+	DeletionProtection types.Bool   `tfsdk:"deletion_protection"`
 }
 
 func (r *EnvironmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -84,6 +85,10 @@ func (r *EnvironmentResource) Schema(ctx context.Context, req resource.SchemaReq
 			"live": schema.BoolAttribute{
 				Required: true,
 			},
+			"deletion_protection": schema.BoolAttribute{
+				Computed:    true,
+				Description: resourceDeletionProtectionDescription,
+			},
 		},
 	}
 }
@@ -107,6 +112,7 @@ func environmentToModel(e *client.Environment, m *EnvironmentModel) {
 	m.Color = stringValue(e.Color)
 	m.ProjectId = stringValue(e.ProjectID)
 	m.Live = boolValue(e.Live)
+	m.DeletionProtection = boolValue(e.DeletionProtection)
 }
 
 func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {

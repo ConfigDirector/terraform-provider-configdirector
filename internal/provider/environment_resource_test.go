@@ -39,6 +39,7 @@ resource "configdirector_environment" "test" {
 					resource.TestCheckResourceAttr("configdirector_environment.test", "slug", "staging-env"),
 					resource.TestCheckResourceAttr("configdirector_environment.test", "color", "blue"),
 					resource.TestCheckResourceAttr("configdirector_environment.test", "live", "false"),
+					resource.TestCheckResourceAttr("configdirector_environment.test", "deletion_protection", "false"),
 				),
 			},
 			{

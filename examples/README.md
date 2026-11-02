@@ -53,6 +53,10 @@ This matters because Terraform merges every `.tf` file in a directory: **`terraf
 before `resource.tf` has created anything to import. Delete or move that one file out of the way first if you want
 to actually run `resource.tf` (see below); `import.sh` is inert since Terraform doesn't parse `.sh` files.
 
+`configdirector_project` and `configdirector_environment` also have `deletion-protection.tf`, a snippet that
+[`templates/resources/`](../templates/resources/) renders into each page's "Deletion protection" section. It imports
+an existing project too, so move it out of the way as well before running `resource.tf`.
+
 The provider is published at [registry.terraform.io/ConfigDirector/configdirector](https://registry.terraform.io/providers/ConfigDirector/configdirector),
 so every other example (and `resource.tf` files once `import-by-string-id.tf` is out of the way) installs normally:
 

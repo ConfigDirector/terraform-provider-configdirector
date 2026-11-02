@@ -36,6 +36,10 @@ func (d *ProjectsDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"deletion_protection": schema.BoolAttribute{
+							Computed:    true,
+							Description: projectDeletionProtectionDescription,
+						},
 						"id":              schema.StringAttribute{Computed: true},
 						"name":            schema.StringAttribute{Computed: true},
 						"organization_id": schema.StringAttribute{Computed: true},
@@ -71,10 +75,11 @@ func (d *ProjectsDataSource) Read(ctx context.Context, req datasource.ReadReques
 	models := make([]projectSummaryModel, len(projects))
 	for i, p := range projects {
 		models[i] = projectSummaryModel{
-			Id:             stringValue(p.ID),
-			Name:           stringValue(p.Name),
-			OrganizationId: stringValue(p.OrganizationID),
-			Slug:           stringValue(p.Slug),
+			DeletionProtection: boolValue(p.DeletionProtection),
+			Id:                 stringValue(p.ID),
+			Name:               stringValue(p.Name),
+			OrganizationId:     stringValue(p.OrganizationID),
+			Slug:               stringValue(p.Slug),
 		}
 	}
 	setVal, diags := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: projectSummaryAttrTypes}, models)

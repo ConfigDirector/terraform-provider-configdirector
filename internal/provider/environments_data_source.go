@@ -41,7 +41,11 @@ func (d *EnvironmentsDataSource) Schema(ctx context.Context, req datasource.Sche
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"color":      schema.StringAttribute{Computed: true},
+						"color": schema.StringAttribute{Computed: true},
+						"deletion_protection": schema.BoolAttribute{
+							Computed:    true,
+							Description: environmentDeletionProtectionDescription,
+						},
 						"id":         schema.StringAttribute{Computed: true},
 						"live":       schema.BoolAttribute{Computed: true},
 						"name":       schema.StringAttribute{Computed: true},

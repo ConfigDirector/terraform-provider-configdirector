@@ -51,6 +51,7 @@ output "project_slugs" {
 
 Read-Only:
 
+- `deletion_protection` (Boolean) Whether deletion protection is on for the project. It is set in the ConfigDirector dashboard; while on, deleting the project fails.
 - `id` (String)
 - `name` (String)
 - `organization_id` (String)

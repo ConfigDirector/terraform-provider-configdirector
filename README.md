@@ -223,6 +223,10 @@ answers 404 on the API host they test, and need a token with `webhooks:manage` a
 TF_ACC=1 go test ./internal/provider -run '^TestAccWebhookResource_' -count=1 -v
 ```
 
+Deletion protection tests import, plan and destroy a protected project and environment against an HTTP stub of the
+Admin API through the same public provider protocol, because only the dashboard turns protection on. The project and
+environment acceptance tests check that what Terraform creates reads `deletion_protection = false`.
+
 Config tag operations hold temporary name arrays and ID maps bounded by the number and total byte length
 of declared spellings, then release them when the operation returns. Resource private state stores those
 spellings grouped under at most 20 accepted tag IDs; equivalent names can share an ID, so the spelling

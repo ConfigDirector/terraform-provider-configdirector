@@ -89,13 +89,14 @@ func pathEscape(s string) string {
 // --- Projects ---
 
 type Project struct {
-	ID             string        `json:"id"`
-	Name           string        `json:"name"`
-	Slug           string        `json:"slug"`
-	OrganizationID string        `json:"organizationId"`
-	CreatedAt      string        `json:"createdAt"`
-	UpdatedAt      string        `json:"updatedAt"`
-	Environments   []Environment `json:"environments,omitempty"`
+	ID                 string        `json:"id"`
+	Name               string        `json:"name"`
+	Slug               string        `json:"slug"`
+	OrganizationID     string        `json:"organizationId"`
+	DeletionProtection bool          `json:"deletionProtection"`
+	CreatedAt          string        `json:"createdAt"`
+	UpdatedAt          string        `json:"updatedAt"`
+	Environments       []Environment `json:"environments,omitempty"`
 }
 
 type CreateProjectRequest struct {
@@ -150,14 +151,15 @@ func (c *Client) UpdateProject(ctx context.Context, projectID string, req Update
 // --- Environments ---
 
 type Environment struct {
-	ID        string `json:"id"`
-	Slug      string `json:"slug"`
-	Name      string `json:"name"`
-	Color     string `json:"color"`
-	ProjectID string `json:"projectId"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
-	Live      bool   `json:"live"`
+	ID                 string `json:"id"`
+	Slug               string `json:"slug"`
+	Name               string `json:"name"`
+	Color              string `json:"color"`
+	ProjectID          string `json:"projectId"`
+	CreatedAt          string `json:"createdAt"`
+	UpdatedAt          string `json:"updatedAt"`
+	Live               bool   `json:"live"`
+	DeletionProtection bool   `json:"deletionProtection"`
 }
 
 type CreateEnvironmentRequest struct {

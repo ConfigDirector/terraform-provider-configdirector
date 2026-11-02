@@ -58,6 +58,7 @@ output "environment_color" {
 ### Read-Only
 
 - `color` (String)
+- `deletion_protection` (Boolean) Whether deletion protection is on for the environment. It is set in the ConfigDirector dashboard; while on, deleting the environment or its project fails.
 - `live` (Boolean)
 - `name` (String)
 - `slug` (String)

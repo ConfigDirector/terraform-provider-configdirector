@@ -47,6 +47,7 @@ output "project_environments" {
 
 ### Read-Only
 
+- `deletion_protection` (Boolean) Whether deletion protection is on for the project. It is set in the ConfigDirector dashboard; while on, deleting the project fails.
 - `environments` (Attributes Set) (see [below for nested schema](#nestedatt--environments))
 - `name` (String)
 - `organization_id` (String)
@@ -58,6 +59,7 @@ output "project_environments" {
 Read-Only:
 
 - `color` (String)
+- `deletion_protection` (Boolean) Whether deletion protection is on for the environment. It is set in the ConfigDirector dashboard; while on, deleting the environment or its project fails.
 - `id` (String)
 - `live` (Boolean)
 - `name` (String)
