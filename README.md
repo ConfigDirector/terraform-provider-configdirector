@@ -23,7 +23,7 @@ terraform {
   required_providers {
     configdirector = {
       source  = "registry.terraform.io/ConfigDirector/configdirector"
-      version = "~> 0.2"
+      version = "~> 0.6"
     }
   }
 }
