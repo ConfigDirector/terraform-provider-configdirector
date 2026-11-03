@@ -4,6 +4,8 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-03
+
 ### Fixed
 
 - A plan or apply no longer fails the first time the network drops a connection to ConfigDirector, as in `read: connection reset by peer`. When a connection cannot be opened, the provider tries again up to twice, half a second and then a second later. When the network breaks a connection after a request went out, it tries again only for requests that read, replace or delete; the others, such as creating a project, still fail, because ConfigDirector may already have received them.
