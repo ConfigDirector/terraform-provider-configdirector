@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type Client struct {
@@ -36,31 +37,18 @@ func (e *APIError) Error() string {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body any, out any) error {
-	var reqBody io.Reader
+	var encodedBody []byte
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("encoding request body: %w", err)
 		}
-		reqBody = bytes.NewReader(b)
+		encodedBody = b
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, reqBody)
+	resp, err := c.send(ctx, method, path, encodedBody)
 	if err != nil {
-		return fmt.Errorf("building request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-SourceClient", "terraform")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("performing request: %w", err)
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -80,6 +68,50 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	}
 
 	return nil
+}
+
+func (c *Client) send(ctx context.Context, method, path string, encodedBody []byte) (*http.Response, error) {
+	for attemptsMade := 1; ; attemptsMade++ {
+		req, err := c.newRequest(ctx, method, path, encodedBody)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := c.HTTPClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+		wait, retry := retryWaitAfter(method, err, attemptsMade)
+		if !retry {
+			return nil, fmt.Errorf("performing request: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("performing request: %w", err)
+		case <-time.After(wait):
+		}
+	}
+}
+
+func (c *Client) newRequest(ctx context.Context, method, path string, encodedBody []byte) (*http.Request, error) {
+	var reqBody io.Reader
+	if encodedBody != nil {
+		reqBody = bytes.NewReader(encodedBody)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("building request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-SourceClient", "terraform")
+	if encodedBody != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	return req, nil
 }
 
 func pathEscape(s string) string {
