@@ -4,6 +4,12 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-02
+
+### Fixed
+
+- A `configdirector_config` experiment, such as an `integer`, `float` or `boolean` one, now applies and refreshes without errors when its `variations` values are written as numbers or booleans, such as `value = 10` or `value = true`. ConfigDirector stores every variation value as text, and the apply used to fail with "Provider produced inconsistent result after apply". Terraform now keeps each value as you wrote it, as long as the value in ConfigDirector stays the same; a value changed outside Terraform still shows up in the next plan. A boolean experiment's `variations` still have to be the two ConfigDirector creates, `{ name = "Enabled", value = true }` and `{ name = "Disabled", value = false }`, in that order. Importing an experiment stores its values as text, such as `"10"`, so the first plan after the import shows them changing to the numbers or booleans in your configuration.
+
 ## [0.6.1] - 2026-11-02
 
 ### Added

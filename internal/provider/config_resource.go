@@ -315,7 +315,7 @@ func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel
 	}
 	m.TypeOptions = typeOptions
 
-	variations, err := dynamicFromJSON(variationsToDynamicJSON(c.Variations))
+	variations, err := dynamicFromJSON(variationsToDynamicJSON(c.Variations, declaredVariationValues(m.Variations)))
 	if err != nil {
 		return fmt.Errorf("converting variations: %w", err)
 	}

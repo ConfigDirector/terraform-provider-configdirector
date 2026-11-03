@@ -3,7 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
+	"strconv"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -201,6 +204,8 @@ func attrValueFromJSON(v any) (attr.Value, error) {
 		return types.BoolValue(x), nil
 	case float64:
 		return types.NumberValue(big.NewFloat(x)), nil
+	case *big.Float:
+		return types.NumberValue(x), nil
 	case string:
 		return types.StringValue(x), nil
 	case []any:
@@ -315,13 +320,17 @@ func jsonFromAttrValue(v attr.Value) (any, error) {
 // always including the key here (even as null) would produce a shape that
 // doesn't match what Terraform parsed from a config that omitted it,
 // surfacing as "provider produced inconsistent result".
-func variationsToDynamicJSON(variations []client.Variation) any {
+func variationsToDynamicJSON(variations []client.Variation, declaredValues []attr.Value) any {
 	if variations == nil {
 		return nil
 	}
 	out := make([]any, len(variations))
 	for i, v := range variations {
-		m := map[string]any{"value": v.Value}
+		value := v.Value
+		if i < len(declaredValues) {
+			value = declaredOrSavedVariationValue(declaredValues[i], v.Value)
+		}
+		m := map[string]any{"value": value}
 		if v.Name != nil {
 			m["name"] = *v.Name
 		}
@@ -355,4 +364,44 @@ func variationsFromDynamic(d types.Dynamic) ([]client.Variation, error) {
 		out[i] = v
 	}
 	return out, nil
+}
+
+func declaredVariationValues(declared types.Dynamic) []attr.Value {
+	variations, isTuple := declared.UnderlyingValue().(types.Tuple)
+	if !isTuple {
+		return nil
+	}
+	values := make([]attr.Value, len(variations.Elements()))
+	for i, variation := range variations.Elements() {
+		if object, isObject := variation.(types.Object); isObject {
+			values[i] = object.Attributes()["value"]
+		}
+	}
+	return values
+}
+
+func declaredOrSavedVariationValue(declared attr.Value, saved any) any {
+	if declared == nil || declared.IsNull() || declared.IsUnknown() {
+		return saved
+	}
+	switch value := declared.(type) {
+	case types.Number:
+		if number, _ := value.ValueBigFloat().Float64(); saved == javaScriptNumberText(number) {
+			return value.ValueBigFloat()
+		}
+	case types.Bool:
+		if saved == strconv.FormatBool(value.ValueBool()) {
+			return value.ValueBool()
+		}
+	}
+	return saved
+}
+
+func javaScriptNumberText(number float64) string {
+	magnitude := math.Abs(number)
+	usesDecimalNotation := magnitude == 0 || (magnitude >= 1e-6 && magnitude < 1e21)
+	if usesDecimalNotation {
+		return strconv.FormatFloat(number, 'f', -1, 64)
+	}
+	return strings.Replace(strconv.FormatFloat(number, 'e', -1, 64), "e-0", "e-", 1)
 }

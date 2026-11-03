@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 
@@ -331,6 +333,297 @@ resource "configdirector_config" "test" {
 					},
 				},
 				Check: resource.TestCheckResourceAttr("configdirector_config.test", "lifetime", "permanent"),
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_integerExperimentKeepsNumberVariationValues(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-experiment-key"
+  role          = "experiment"
+  type          = "integer"
+  variations    = [{ name = "Off", value = 0 }, { name = "Small", value = 10 }]
+  initial_value = 0
+}
+`,
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("configdirector_config.test", tfjsonpath.New("variations"), knownvalue.TupleExact([]knownvalue.Check{
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Off"), "value": knownvalue.Int64Exact(0)}),
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Small"), "value": knownvalue.Int64Exact(10)}),
+					})),
+				},
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPreRefresh:  []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_floatExperimentKeepsNumberVariationValues(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-experiment-key"
+  role          = "experiment"
+  type          = "float"
+  variations    = [{ name = "Half", value = 0.5 }, { name = "Tiny", value = 0.0000001 }, { name = "Huge", value = 1e21 }]
+  initial_value = 0.5
+}
+`,
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("configdirector_config.test", tfjsonpath.New("variations"), knownvalue.TupleExact([]knownvalue.Check{
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Half"), "value": knownvalue.Float64Exact(0.5)}),
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Tiny"), "value": knownvalue.Float64Exact(0.0000001)}),
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Huge"), "value": knownvalue.Float64Exact(1e21)}),
+					})),
+				},
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPreRefresh:  []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_booleanExperimentKeepsBooleanVariationValues(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-experiment-key"
+  role          = "experiment"
+  type          = "boolean"
+  variations    = [{ name = "Enabled", value = true }, { name = "Disabled", value = false }]
+  initial_value = false
+}
+`,
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("configdirector_config.test", tfjsonpath.New("variations"), knownvalue.TupleExact([]knownvalue.Check{
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Enabled"), "value": knownvalue.Bool(true)}),
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Disabled"), "value": knownvalue.Bool(false)}),
+					})),
+				},
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPreRefresh:  []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_updatedIntegerExperimentKeepsNumberVariationValues(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-experiment-key"
+  role          = "experiment"
+  type          = "integer"
+  variations    = [{ name = "Off", value = 0 }, { name = "Small", value = 10 }]
+  initial_value = 0
+}
+`,
+			},
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-experiment-key"
+  role          = "experiment"
+  type          = "integer"
+  variations    = [{ name = "Off", value = 0 }, { name = "Large", value = 20 }]
+  initial_value = 0
+}
+`,
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("configdirector_config.test", tfjsonpath.New("variations"), knownvalue.TupleExact([]knownvalue.Check{
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Off"), "value": knownvalue.Int64Exact(0)}),
+						knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Large"), "value": knownvalue.Int64Exact(20)}),
+					})),
+				},
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply:             []plancheck.PlanCheck{plancheck.ExpectResourceAction("configdirector_config.test", plancheck.ResourceActionUpdate)},
+					PostApplyPreRefresh:  []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+		},
+	})
+}
+
+type refreshedVariationsCheck struct {
+	variations knownvalue.Check
+}
+
+func (check refreshedVariationsCheck) CheckPlan(ctx context.Context, request plancheck.CheckPlanRequest, response *plancheck.CheckPlanResponse) {
+	for _, change := range request.Plan.ResourceChanges {
+		if change.Address != "configdirector_config.test" {
+			continue
+		}
+
+		variations, err := tfjsonpath.Traverse(change.Change.Before, tfjsonpath.New("variations"))
+		if err != nil {
+			response.Error = err
+			return
+		}
+		response.Error = check.variations.CheckValue(variations)
+		return
+	}
+	response.Error = errors.New("expected a planned change to configdirector_config.test")
+}
+
+func TestAccConfigResource_importedIntegerExperimentStoresVariationValuesAsText(t *testing.T) {
+	p := newTestAccProject(t)
+
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("Acceptance tests skipped unless env 'TF_ACC' set")
+	}
+	testAccPreCheck(t)
+
+	ctx := context.Background()
+	c := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
+
+	project, err := c.CreateProject(ctx, client.CreateProjectRequest{Name: p.Name, Slug: p.Slug})
+	if err != nil {
+		t.Fatalf("creating project: %s", err)
+	}
+	t.Cleanup(func() {
+		if err := c.DeleteProject(ctx, project.ID); err != nil {
+			t.Logf("cleaning up project %s: %s", project.ID, err)
+		}
+	})
+
+	off, small := "Off", "Small"
+	if _, err := c.CreateConfig(ctx, project.ID, client.CreateConfigRequest{
+		Key:          "test-experiment-key",
+		Role:         "experiment",
+		Type:         "integer",
+		Variations:   []client.Variation{{Name: &off, Value: 0}, {Name: &small, Value: 10}},
+		DefaultValue: 0,
+	}); err != nil {
+		t.Fatalf("creating config: %s", err)
+	}
+
+	config := fmt.Sprintf(`
+resource "configdirector_config" "test" {
+  project_id    = %q
+  key           = "test-experiment-key"
+  role          = "experiment"
+  type          = "integer"
+  variations    = [{ name = "Off", value = 0 }, { name = "Small", value = 10 }]
+  initial_value = 0
+}
+`, project.ID)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:             config,
+				ResourceName:       "configdirector_config.test",
+				ImportState:        true,
+				ImportStatePersist: true,
+				ImportStateId:      project.ID + "/test-experiment-key",
+			},
+			{
+				RefreshState:       true,
+				ExpectNonEmptyPlan: true,
+				RefreshPlanChecks: resource.RefreshPlanChecks{
+					PostRefresh: []plancheck.PlanCheck{
+						refreshedVariationsCheck{knownvalue.TupleExact([]knownvalue.Check{
+							knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Off"), "value": knownvalue.StringExact("0")}),
+							knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Small"), "value": knownvalue.StringExact("10")}),
+						})},
+					},
+				},
+			},
+		},
+	})
+}
+
+func TestAccConfigResource_variationValueChangedOutsideTerraformShowsAsDrift(t *testing.T) {
+	p := newTestAccProject(t)
+
+	var projectID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_config" "test" {
+  project_id    = configdirector_project.test.id
+  key           = "test-experiment-key"
+  role          = "experiment"
+  type          = "integer"
+  variations    = [{ name = "Off", value = 0 }, { name = "Small", value = 10 }]
+  initial_value = 0
+}
+`,
+				Check: resource.TestCheckResourceAttrWith("configdirector_config.test", "project_id", func(value string) error {
+					projectID = value
+					return nil
+				}),
+			},
+			{
+				RefreshState: true,
+				PreConfig: func() {
+					off, large := "Off", "Large"
+					c := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
+					if _, err := c.UpdateConfig(context.Background(), projectID, "test-experiment-key", client.UpdateConfigRequest{
+						Key:        "test-experiment-key",
+						Role:       "experiment",
+						Type:       "integer",
+						Variations: []client.Variation{{Name: &off, Value: 0}, {Name: &large, Value: 30}},
+						Server:     true,
+						Client:     true,
+					}); err != nil {
+						t.Fatalf("changing a variation value out of band: %s", err)
+					}
+				},
+				ExpectNonEmptyPlan: true,
+				RefreshPlanChecks: resource.RefreshPlanChecks{
+					PostRefresh: []plancheck.PlanCheck{
+						refreshedVariationsCheck{knownvalue.TupleExact([]knownvalue.Check{
+							knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Off"), "value": knownvalue.Int64Exact(0)}),
+							knownvalue.ObjectExact(map[string]knownvalue.Check{"name": knownvalue.StringExact("Large"), "value": knownvalue.StringExact("30")}),
+						})},
+					},
+				},
 			},
 		},
 	})
