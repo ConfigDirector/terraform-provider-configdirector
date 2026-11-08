@@ -3,14 +3,14 @@
 page_title: "configdirector_webhook Resource - terraform-provider-configdirector"
 subcategory: ""
 description: |-
-  A webhook sends a signed HTTPS request to a URL whenever a config, its targeting rules, a segment, an environment or a project changes, or an alert is raised or resolved. Webhooks belong to the organization, which can have up to 10. See https://docs.configdirector.com/integrations/webhooks for what each request holds and how to verify it.
+  A webhook sends a signed HTTPS request to a URL whenever a config, its targeting rules, a segment, an environment or a project changes, an experiment's run starts, changes or ends, or an alert is raised or resolved. Webhooks belong to the organization, which can have up to 10. See https://docs.configdirector.com/integrations/webhooks for what each request holds and how to verify it.
   Requires an API token with the webhooks:manage permission. Import with the webhook's ID.
   ConfigDirector never returns header values, so Terraform notices a header added or removed outside Terraform but not a value changed there. After an import, the first apply writes the header values from the configuration. If ConfigDirector disables the webhook after three days of failed deliveries, the next apply enables it again while enabled is true.
 ---
 
 # configdirector_webhook (Resource)
 
-A webhook sends a signed HTTPS request to a URL whenever a config, its targeting rules, a segment, an environment or a project changes, or an alert is raised or resolved. Webhooks belong to the organization, which can have up to 10. See https://docs.configdirector.com/integrations/webhooks for what each request holds and how to verify it.
+A webhook sends a signed HTTPS request to a URL whenever a config, its targeting rules, a segment, an environment or a project changes, an experiment's run starts, changes or ends, or an alert is raised or resolved. Webhooks belong to the organization, which can have up to 10. See https://docs.configdirector.com/integrations/webhooks for what each request holds and how to verify it.
 
 Requires an API token with the webhooks:manage permission. Import with the webhook's ID.
 
@@ -79,7 +79,7 @@ resource "configdirector_webhook" "incidents" {
 - `alert_kinds` (Set of String) The alert kinds whose alert events the webhook receives, such as default-value-mismatch. Defaults to none.
 - `enabled` (Boolean) Whether the webhook sends requests. Defaults to true. Disabling it abandons the deliveries still waiting for an attempt.
 - `environment_ids` (Set of String) Send only the webhook events that belong to these environments, along with every webhook event that belongs to no environment: config settings, segments (except a change to one environment's override), projects and alerts. Leave it empty, as it is by default, to receive webhook events from every environment.
-- `event_types` (Set of String) The change events the webhook receives: config.created, config.updated, config.archived, config.restored, targeting_rules.updated, segment.created, segment.updated, segment.deleted, environment.created, environment.updated, environment.deleted, project.created, project.updated, project.deleted. Defaults to all of them. Set it to [] for a webhook that receives only alert events.
+- `event_types` (Set of String) The change events the webhook receives: config.created, config.updated, config.archived, config.restored, targeting_rules.updated, experiment_run.started, experiment_run.replaced, experiment_run.shipped, experiment_run.stopped, segment.created, segment.updated, segment.deleted, environment.created, environment.updated, environment.deleted, project.created, project.updated, project.deleted. Defaults to all of them. Set it to [] for a webhook that receives only alert events.
 - `headers` (Map of String, Sensitive) Up to 5 custom headers sent with every request, from header name to value, for example an Authorization header your receiver checks. Each name can be used once, whatever its casing. A value is at most 1,024 characters of printable Latin-1 text with no line breaks. ConfigDirector sets content-type, content-length, host, user-agent, webhook-id, webhook-signature and webhook-timestamp itself, so they can't be custom headers. ConfigDirector never shows a value again once it is saved, so a value changed outside Terraform goes unnoticed.
 - `project_ids` (Set of String) Send only the webhook events that belong to these projects. Leave it empty, as it is by default, to receive webhook events from every project. A webhook filtered to projects receives no alert events, because alerts belong to no project.
 - `tag_ids` (Set of String) Send only the webhook events about configs that have one of these tags, along with every webhook event that isn't about a config: segments, environments, projects and alerts. Leave it empty, as it is by default, to receive webhook events about every config.

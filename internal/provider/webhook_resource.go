@@ -40,6 +40,10 @@ var everyChangeEventType = []string{
 	"config.archived",
 	"config.restored",
 	"targeting_rules.updated",
+	"experiment_run.started",
+	"experiment_run.replaced",
+	"experiment_run.shipped",
+	"experiment_run.stopped",
 	"segment.created",
 	"segment.updated",
 	"segment.deleted",
@@ -89,7 +93,7 @@ func (r *webhookResource) Metadata(ctx context.Context, req resource.MetadataReq
 
 func (r *webhookResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "A webhook sends a signed HTTPS request to a URL whenever a config, its targeting rules, a segment, an environment or a project changes, or an alert is raised or resolved. Webhooks belong to the organization, which can have up to 10. " +
+		Description: "A webhook sends a signed HTTPS request to a URL whenever a config, its targeting rules, a segment, an environment or a project changes, an experiment's run starts, changes or ends, or an alert is raised or resolved. Webhooks belong to the organization, which can have up to 10. " +
 			"See https://docs.configdirector.com/integrations/webhooks for what each request holds and how to verify it.\n\n" +
 			"Requires an API token with the webhooks:manage permission. Import with the webhook's ID.\n\n" +
 			"ConfigDirector never returns header values, so Terraform notices a header added or removed outside Terraform but not a value changed there. After an import, the first apply writes the header values from the configuration. " +

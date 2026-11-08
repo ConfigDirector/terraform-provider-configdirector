@@ -222,21 +222,6 @@ func (protocol integrationProtocol) validate(t *testing.T, configuration *tfprot
 	return validated.Diagnostics
 }
 
-func (protocol integrationProtocol) requireNoPlannedChange(t *testing.T, state, configuration *tfprotov6.DynamicValue) {
-	t.Helper()
-
-	planned := protocol.plan(t, state, configuration)
-	if len(planned.RequiresReplace) != 0 {
-		t.Fatalf("expected no replacement, got one for %v", planned.RequiresReplace)
-	}
-	plannedValues := protocol.values(t, planned.PlannedState)
-	for name, value := range protocol.values(t, state) {
-		if !value.Equal(plannedValues[name]) {
-			t.Fatalf("expected the plan to leave %s as it is, got %s planned over %s", name, plannedValues[name], value)
-		}
-	}
-}
-
 func withSetting(settings map[string]string, name, value string) map[string]string {
 	changed := maps.Clone(settings)
 	changed[name] = value

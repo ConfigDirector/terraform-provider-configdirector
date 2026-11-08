@@ -28,6 +28,15 @@ const testAccWebhookNamePrefix = "tf-acc-"
 var changeEventTypesTheAPIOffers = []string{
 	"config.archived", "config.created", "config.restored", "config.updated",
 	"environment.created", "environment.deleted", "environment.updated",
+	"experiment_run.replaced", "experiment_run.shipped", "experiment_run.started", "experiment_run.stopped",
+	"project.created", "project.deleted", "project.updated",
+	"segment.created", "segment.deleted", "segment.updated",
+	"targeting_rules.updated",
+}
+
+var changeEventTypesBeforeExperimentRuns = []string{
+	"config.archived", "config.created", "config.restored", "config.updated",
+	"environment.created", "environment.deleted", "environment.updated",
 	"project.created", "project.deleted", "project.updated",
 	"segment.created", "segment.deleted", "segment.updated",
 	"targeting_rules.updated",
@@ -293,6 +302,31 @@ func TestWebhookResource_emptyEventTypesReceiveNoChangeEvent(t *testing.T) {
 	}
 	if alertKinds, isList := sent["alertKinds"].([]any); !isList || !slices.Equal(alertKinds, []any{"config-settled", "config-type-mismatch"}) {
 		t.Fatalf("expected the create to send both alert kinds, got %#v", sent["alertKinds"])
+	}
+}
+
+func TestWebhookResource_declaredEventTypesWithoutExperimentRunsPlanNoChange(t *testing.T) {
+	protocol, _ := newWebhookStubProtocol(t)
+	configuration := protocol.config(t, map[string]tftypes.Value{
+		"event_types": stringSetOf(changeEventTypesBeforeExperimentRuns...),
+	})
+	created := protocol.apply(t, protocol.absent(t), configuration)
+
+	refreshed := protocol.refresh(t, created)
+
+	protocol.requireNoPlannedChange(t, refreshed, configuration)
+}
+
+func TestWebhookResource_planGivesAWebhookLeavingOutEventTypesEveryChangeEventType(t *testing.T) {
+	protocol, _ := newWebhookStubProtocol(t)
+	created := protocol.apply(t, protocol.absent(t), protocol.config(t, map[string]tftypes.Value{
+		"event_types": stringSetOf(changeEventTypesBeforeExperimentRuns...),
+	}))
+
+	planned := protocol.plannedValues(t, created, protocol.config(t, nil))
+
+	if got := sortedStringsOf(t, planned["event_types"]); !slices.Equal(got, changeEventTypesTheAPIOffers) {
+		t.Fatalf("expected the plan to add the experiment run event types, got %v", got)
 	}
 }
 
