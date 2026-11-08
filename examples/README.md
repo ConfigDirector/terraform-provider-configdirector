@@ -25,6 +25,13 @@ get pulled directly into the generated provider docs.
     header and its signing secret passed to a receiver module, and a webhook
     that receives only alert events. The configuration asks for `ci_token`,
     the header value, when you plan it
+  - [configdirector_integration](resources/configdirector_integration/resource.tf) -
+    an Amplitude integration filtered to a project's production environment,
+    with [Mixpanel](resources/configdirector_integration/mixpanel.tf),
+    [Datadog](resources/configdirector_integration/datadog.tf),
+    [Grafana](resources/configdirector_integration/grafana.tf) and
+    [PostHog](resources/configdirector_integration/posthog.tf) beside it. The
+    configuration asks for each tool's keys when you plan it
 - `data-sources/<data_source_type>/data-source.tf` - one directory per data
   source, each creating whatever resource(s) it needs to look up:
   - [configdirector_project](data-sources/configdirector_project/data-source.tf)

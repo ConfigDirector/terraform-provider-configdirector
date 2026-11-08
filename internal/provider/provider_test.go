@@ -31,6 +31,7 @@ func TestMain(m *testing.M) {
 	if os.Getenv("TF_ACC") != "" && os.Getenv("CONFIGDIRECTOR_TOKEN") != "" {
 		deleteLeftoverTestProjects()
 		deleteLeftoverTestWebhooks()
+		deleteLeftoverTestIntegrations()
 	}
 	os.Exit(m.Run())
 }
@@ -54,6 +55,28 @@ func deleteLeftoverTestWebhooks() {
 			continue
 		}
 		log.Printf("deleted leftover test webhook %q (%s)", webhook.Name, webhook.ID)
+	}
+}
+
+func deleteLeftoverTestIntegrations() {
+	ctx := context.Background()
+	api := client.New(testAccBaseURL(), os.Getenv("CONFIGDIRECTOR_TOKEN"))
+
+	integrations, err := api.ListIntegrations(ctx)
+	if err != nil {
+		log.Printf("listing integrations to find leftover test integrations: %s", err)
+		return
+	}
+
+	for _, integration := range integrations {
+		if !strings.HasPrefix(integration.Name, testAccIntegrationNamePrefix) {
+			continue
+		}
+		if err := api.DeleteIntegration(ctx, integration.ID); err != nil {
+			log.Printf("deleting leftover test integration %q (%s): %s", integration.Name, integration.ID, err)
+			continue
+		}
+		log.Printf("deleted leftover test integration %q (%s)", integration.Name, integration.ID)
 	}
 }
 

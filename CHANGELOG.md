@@ -4,6 +4,10 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+### Added
+
+- `configdirector_integration` manages an integration with Amplitude, Mixpanel, Datadog, Grafana or PostHog, which marks experiment runs on the tool's charts, from Terraform or OpenTofu. Set its `kind`, the `settings` that kind needs, including the optional `endpoint_url`, whether it is `enabled`, and its project, environment and tag filters. Keys, tokens and secrets are sensitive, so no plan shows them. Leaving out a setting the kind needs, or leaving it blank, fails the plan with a message saying what is missing, such as "The API key is required", and a setting another kind uses fails the plan too. ConfigDirector never returns a key, token or secret, so changing one in the configuration saves all of the integration's credentials on the next apply, and replacing one in the dashboard goes unnoticed. Changing `kind` replaces the integration, which deletes its delivery log. Import an integration by its ID; an import reads everything except the keys, tokens and secrets, so the first apply after it saves the ones in your configuration. The API token needs `integrations:manage`.
+
 ## [0.6.3] - 2026-11-03
 
 ### Fixed

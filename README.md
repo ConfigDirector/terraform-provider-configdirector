@@ -192,6 +192,34 @@ reaches the state on the next refresh. The API token needs `webhooks:manage`, wh
 grant. See the [webhook resource reference](docs/resources/webhook.md) and
 [what a webhook sends](https://docs.configdirector.com/integrations/webhooks).
 
+## Managing analytics integrations with Terraform or OpenTofu
+
+Use `configdirector_integration` to mark experiment runs on the charts of Amplitude, Mixpanel, Datadog, Grafana or
+PostHog. Set `kind` to the tool and fill in the `settings` that kind needs:
+
+```hcl
+resource "configdirector_integration" "amplitude" {
+  name = "Amplitude"
+  kind = "amplitude"
+  settings = {
+    data_center = "us"
+    api_key     = var.amplitude_api_key
+    secret_key  = var.amplitude_secret_key
+  }
+  project_ids = [configdirector_project.example.id]
+}
+```
+
+A setting the kind needs that is missing fails the plan, and so does a setting another kind uses. ConfigDirector never
+returns a key, token or secret, so they are sensitive and Terraform keeps the values from your configuration: changing
+one saves all of the integration's credentials on the next apply, and replacing one in the dashboard goes unnoticed.
+Changing any other setting leaves them as saved. Changing `kind` replaces the integration, which deletes its delivery
+log. Import uses the integration's ID; an import reads everything except the keys, tokens and secrets, so the first
+apply after it saves the ones in your configuration. The API token
+needs `integrations:manage`, which only owners and admins can grant. See the
+[integration resource reference](docs/resources/integration.md) and
+[what each tool needs](https://docs.configdirector.com/integrations/analytics).
+
 ## Developing the provider
 
 ```sh
@@ -221,6 +249,14 @@ answers 404 on the API host they test, and need a token with `webhooks:manage` a
 
 ```sh
 TF_ACC=1 go test ./internal/provider -run '^TestAccWebhookResource_' -count=1 -v
+```
+
+Integration tests use the same public provider protocol. Their local tests run against an HTTP stub of the Admin API.
+The API tests create Amplitude integrations named `tf-acc-...` with made-up credentials and need a token with
+`integrations:manage`:
+
+```sh
+TF_ACC=1 go test ./internal/provider -run '^TestAccIntegrationResource_' -count=1 -v
 ```
 
 Deletion protection tests import, plan and destroy a protected project and environment against an HTTP stub of the

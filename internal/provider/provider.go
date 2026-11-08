@@ -98,6 +98,7 @@ func (p *ConfigDirectorProvider) Resources(ctx context.Context) []func() resourc
 		NewSegmentResource,
 		newTagResource,
 		newWebhookResource,
+		newIntegrationResource,
 	}
 }
 
