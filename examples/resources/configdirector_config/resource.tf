@@ -2,7 +2,7 @@ terraform {
   required_providers {
     configdirector = {
       source  = "ConfigDirector/configdirector"
-      version = "~> 0.6"
+      version = "~> 0.8"
     }
   }
 }
@@ -93,19 +93,32 @@ resource "configdirector_config" "checkout_theme" {
   initial_value = "classic"
 }
 
+resource "configdirector_metric" "subscription_started" {
+  project_id = configdirector_project.example.id
+  event_name = "subscription_started"
+  direction  = "higher-is-better"
+  kinds      = ["conversion"]
+}
+
 # An experiment with named variations - see
 # configdirector_config_targeting_rules for how traffic actually gets split
-# between them.
+# between them. Its metrics say what the results measure, and its hypothesis
+# what the team expects; each run keeps the hypothesis it started with.
 resource "configdirector_config" "pricing_experiment" {
   project_id = configdirector_project.example.id
   key        = "pricing-experiment"
   role       = "experiment"
   type       = "string"
+  hypothesis = "A lower price gets more customers to subscribe."
 
   variations = [
     { name = "Control", value = "control" },
     { name = "Higher Price", value = "higher-price" },
     { name = "Lower Price", value = "lower-price" },
+  ]
+
+  metrics = [
+    { metric_id = configdirector_metric.subscription_started.id, role = "primary", primary_kind = "conversion" },
   ]
 
   initial_value = "control"

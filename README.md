@@ -6,7 +6,7 @@
 
 This is the official Terraform provider for [ConfigDirector](https://www.configdirector.com), remote config and
 feature flags with typed values, JSON Schema validation, and safe renames of live flags. It manages projects,
-environments, configs, segments, tags, targeting rules, and webhooks as Terraform resources.
+environments, configs, segments, metrics, tags, targeting rules, webhooks, and integrations as Terraform resources.
 
 ## Requirements
 
@@ -158,6 +158,52 @@ assignments. Leave `tags` omitted to preserve them, or declare a set to take own
 assigned names in `tags`, under `configs:read` alone. No standalone tag lookup data source is needed.
 
 These examples work with the same provider address in Terraform and OpenTofu.
+
+## Measuring experiments with metrics
+
+Use `configdirector_metric` to define what an experiment measures: one tracked event name per project, whether a
+higher or a lower number is better, and the kinds its results report. Attach metrics to an experiment with `metrics`
+on `configdirector_config`, and write what the team expects in `hypothesis`:
+
+```hcl
+resource "configdirector_metric" "checkout_completed" {
+  project_id = configdirector_project.example.id
+  event_name = "checkout_completed"
+  direction  = "higher-is-better"
+  kinds      = ["conversion", "value-per-context"]
+}
+
+resource "configdirector_config" "checkout_button_copy" {
+  project_id    = configdirector_project.example.id
+  key           = "checkout-button-copy"
+  role          = "experiment"
+  type          = "string"
+  hypothesis    = "Urgent copy gets more customers to check out."
+  initial_value = "Buy now"
+  variations = [
+    { name = "Control", value = "Buy now" },
+    { name = "Urgency", value = "Buy now - limited stock" },
+  ]
+  metrics = [
+    { metric_id = configdirector_metric.checkout_completed.id, role = "primary", primary_kind = "conversion" },
+  ]
+}
+```
+
+Each metric in `metrics` has a `role`: one `primary` metric with the `primary_kind` that decides the experiment, and
+the rest `secondary` or `guardrail`, up to 10 in all. Leave `metrics` out to keep the metrics attached in the
+dashboard, or set `metrics = []` to detach them all. Leaving `hypothesis` out keeps the current one, and
+`hypothesis = ""` removes it. Only an experiment has metrics or a hypothesis, so a metric or a hypothesis on another
+role fails the plan. An experiment created with metrics gets them in a second request; if that request fails, the next apply
+replaces the new experiment.
+
+Changing a metric's `event_name` replaces it, and the experiments that reference it attach the new one in the same
+apply. Destroying a metric fails while an experiment it is attached to has an open run, and so does replacing it: stop
+or ship the run first. To remove such a metric, you can also detach it in one apply and remove it in the next. Import a metric with `<project_id_or_slug>/<event_name>`.
+The API token needs `metrics:read`, `metrics:create`, `metrics:update` and `metrics:delete`, and changing an
+experiment's metrics or hypothesis needs `config-settings:update`. See the
+[metric resource reference](docs/resources/metric.md) and
+[experiments](https://docs.configdirector.com/getting-started/experiments).
 
 ## Managing webhooks with Terraform or OpenTofu
 

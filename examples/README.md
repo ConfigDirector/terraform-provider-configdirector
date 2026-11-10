@@ -11,13 +11,17 @@ get pulled directly into the generated provider docs.
   - [configdirector_project](resources/configdirector_project/resource.tf)
   - [configdirector_environment](resources/configdirector_environment/resource.tf)
   - [configdirector_config](resources/configdirector_config/resource.tf) -
-    several role/type/type_options combinations, tag-name dependencies, and an explicit empty tag selection
+    several role/type/type_options combinations, tag-name dependencies, an explicit empty tag selection, and an
+    experiment with a metric and a hypothesis
   - [configdirector_config_targeting_rules](resources/configdirector_config_targeting_rules/resource.tf) -
     multiple configs, each with conditional and percentage-based targeting
     rules across environments
   - [configdirector_segment](resources/configdirector_segment/resource.tf) -
     a segment with two condition groups and an environment override, used by
     a targeting rule through a segment condition
+  - [configdirector_metric](resources/configdirector_metric/resource.tf) -
+    two metrics attached to an experiment, one as its primary metric and one
+    as a guardrail
   - [configdirector_tag](resources/configdirector_tag/resource.tf) -
     a shared project tag with spaces and punctuation in its name
   - [configdirector_webhook](resources/configdirector_webhook/resource.tf) -

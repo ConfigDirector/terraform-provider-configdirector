@@ -303,23 +303,31 @@ type ConfigTarget struct {
 // since the provider represents them with Terraform's dynamic type instead of
 // a string - see dynamicFromJSON/jsonFromDynamic in the provider package.
 type Config struct {
-	ID             string          `json:"id"`
-	ProjectID      string          `json:"projectId"`
-	Key            string          `json:"key"`
-	Description    *string         `json:"description"`
-	Role           string          `json:"role"`
-	Lifetime       string          `json:"lifetime"`
-	Type           string          `json:"type"`
-	TypeOptions    any             `json:"typeOptions"`
-	State          string          `json:"state"`
-	Client         bool            `json:"client"`
-	Server         bool            `json:"server"`
-	Variations     []Variation     `json:"variations"`
-	Targets        []ConfigTarget  `json:"targets"`
-	CreatedAt      string          `json:"createdAt"`
-	UpdatedAt      string          `json:"updatedAt"`
-	DeprecatedKeys []DeprecatedKey `json:"deprecatedKeys"`
-	Tags           []AssignedTag   `json:"tags"`
+	ID             string             `json:"id"`
+	ProjectID      string             `json:"projectId"`
+	Key            string             `json:"key"`
+	Description    *string            `json:"description"`
+	Role           string             `json:"role"`
+	Lifetime       string             `json:"lifetime"`
+	Type           string             `json:"type"`
+	TypeOptions    any                `json:"typeOptions"`
+	State          string             `json:"state"`
+	Client         bool               `json:"client"`
+	Server         bool               `json:"server"`
+	Variations     []Variation        `json:"variations"`
+	Targets        []ConfigTarget     `json:"targets"`
+	CreatedAt      string             `json:"createdAt"`
+	UpdatedAt      string             `json:"updatedAt"`
+	DeprecatedKeys []DeprecatedKey    `json:"deprecatedKeys"`
+	Tags           []AssignedTag      `json:"tags"`
+	Metrics        []MetricAttachment `json:"metrics"`
+	Hypothesis     *string            `json:"hypothesis"`
+}
+
+type MetricAttachment struct {
+	MetricID    string  `json:"metricId"`
+	Role        string  `json:"role"`
+	PrimaryKind *string `json:"primaryKind"`
 }
 
 type AssignedTag struct {
@@ -339,6 +347,7 @@ type CreateConfigRequest struct {
 	Variations   []Variation `json:"variations,omitempty"`
 	DefaultValue any         `json:"defaultValue"`
 	TagIDs       *[]string   `json:"tagIds,omitempty"`
+	Hypothesis   *string     `json:"hypothesis,omitempty"`
 }
 
 type updateConfigAvailability struct {
@@ -356,6 +365,8 @@ type updateConfigRequest struct {
 	Variations   []Variation               `json:"variations,omitempty"`
 	Availability *updateConfigAvailability `json:"availability,omitempty"`
 	TagIDs       *[]string                 `json:"tagIds,omitempty"`
+	Metrics      *[]MetricAttachment       `json:"metrics,omitempty"`
+	Hypothesis   *string                   `json:"hypothesis,omitempty"`
 }
 
 // UpdateConfigRequest is the caller-facing shape; the API's PATCH endpoint
@@ -372,6 +383,8 @@ type UpdateConfigRequest struct {
 	Server      bool
 	Client      bool
 	TagIDs      *[]string
+	Metrics     *[]MetricAttachment
+	Hypothesis  *string
 }
 
 func (c *Client) CreateConfig(ctx context.Context, projectID string, req CreateConfigRequest) (*Config, error) {
@@ -406,6 +419,8 @@ func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req Up
 		TypeOptions: req.TypeOptions,
 		Variations:  req.Variations,
 		TagIDs:      req.TagIDs,
+		Metrics:     req.Metrics,
+		Hypothesis:  req.Hypothesis,
 		Availability: &updateConfigAvailability{
 			Server: req.Server,
 			Client: req.Client,
@@ -415,6 +430,18 @@ func (c *Client) UpdateConfig(ctx context.Context, projectID, key string, req Up
 		return nil, err
 	}
 	return c.GetConfig(ctx, projectID, req.Key)
+}
+
+type updateConfigMetricsRequest struct {
+	Metrics []MetricAttachment `json:"metrics"`
+}
+
+func (c *Client) UpdateConfigMetrics(ctx context.Context, projectID, key string, metrics []MetricAttachment) (*Config, error) {
+	path := fmt.Sprintf("/v1/projects/%s/configs/%s", pathEscape(projectID), pathEscape(key))
+	if err := c.do(ctx, http.MethodPatch, path, updateConfigMetricsRequest{Metrics: metrics}, nil); err != nil {
+		return nil, err
+	}
+	return c.GetConfig(ctx, projectID, key)
 }
 
 func (c *Client) DeleteConfig(ctx context.Context, projectID, key string) error {

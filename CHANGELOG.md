@@ -4,6 +4,11 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+### Added
+
+- `configdirector_metric` manages a metric, what an experiment measures: one tracked event name per project, with its `direction`, the `kinds` its results report and an optional `description`, which leaving out removes. Changing `event_name` replaces the metric, and the experiments that reference it attach the new one in the same apply. Destroying or replacing a metric fails with ConfigDirector's message while an experiment it is attached to has an open run: stop or ship the run first. To remove such a metric, you can also detach it in one apply and remove it in the next. Import a metric with `<project_id_or_slug>/<event_name>`; only the first slash separates the project from the event name. The API token needs `metrics:read`, `metrics:create`, `metrics:update` and `metrics:delete`.
+- `configdirector_config` takes `metrics` and `hypothesis` on an experiment. Each metric in `metrics` has a `metric_id`, a `role` of `primary`, `secondary` or `guardrail`, and, on the primary metric, the `primary_kind` that decides the experiment. Leaving `metrics` out keeps the metrics attached in the dashboard, and `metrics = []` detaches them all. Leaving `hypothesis` out keeps the current one, and `hypothesis = ""` removes it. A metric or a hypothesis on a config that is not an experiment fails the plan with "Only an experiment can have metrics." or "Only an experiment can have a hypothesis." An experiment created with metrics gets them in a second request, so its audit log shows the creation and then a settings change; if attaching fails, the apply fails and the next apply replaces the new experiment. Changing an experiment's metrics or hypothesis needs `config-settings:update`.
+
 ## [0.7.0] - 2026-11-08
 
 ### Added

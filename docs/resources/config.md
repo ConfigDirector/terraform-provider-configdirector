@@ -17,7 +17,7 @@ terraform {
   required_providers {
     configdirector = {
       source  = "ConfigDirector/configdirector"
-      version = "~> 0.6"
+      version = "~> 0.8"
     }
   }
 }
@@ -108,19 +108,32 @@ resource "configdirector_config" "checkout_theme" {
   initial_value = "classic"
 }
 
+resource "configdirector_metric" "subscription_started" {
+  project_id = configdirector_project.example.id
+  event_name = "subscription_started"
+  direction  = "higher-is-better"
+  kinds      = ["conversion"]
+}
+
 # An experiment with named variations - see
 # configdirector_config_targeting_rules for how traffic actually gets split
-# between them.
+# between them. Its metrics say what the results measure, and its hypothesis
+# what the team expects; each run keeps the hypothesis it started with.
 resource "configdirector_config" "pricing_experiment" {
   project_id = configdirector_project.example.id
   key        = "pricing-experiment"
   role       = "experiment"
   type       = "string"
+  hypothesis = "A lower price gets more customers to subscribe."
 
   variations = [
     { name = "Control", value = "control" },
     { name = "Higher Price", value = "higher-price" },
     { name = "Lower Price", value = "lower-price" },
+  ]
+
+  metrics = [
+    { metric_id = configdirector_metric.subscription_started.id, role = "primary", primary_kind = "conversion" },
   ]
 
   initial_value = "control"
@@ -142,7 +155,9 @@ resource "configdirector_config" "pricing_experiment" {
 
 - `client` (Boolean)
 - `description` (String)
+- `hypothesis` (String) What the team expects the variations to do, up to 1,000 characters. Only an experiment has a hypothesis. Each run keeps the hypothesis as it was when the run started, so changing it changes neither earlier runs nor the run in progress. Omit to keep the current hypothesis; set "" to remove it.
 - `lifetime` (String) "temporary" for a config you expect to remove, which ConfigDirector tracks through its lifecycle, or "permanent". The role decides it for every role but "config": a flag or an experiment is always temporary and a kill switch always permanent, so leave it out for those; a value that contradicts the role fails the plan. A config with the "config" role needs a lifetime when it is created; leaving it out later keeps the lifetime it has.
+- `metrics` (Attributes Set) The metrics an experiment measures, unordered: up to 10, at most one of them primary. Only an experiment has metrics. Omit to keep the metrics attached in the dashboard or elsewhere, during unrelated updates and after import; set [] to detach every metric. A set of metrics manages exactly those and corrects attachment drift. Creating an experiment with metrics attaches them in a second request once the experiment exists; when that request fails, the experiment is replaced on the next apply. Attaching metrics requires config-settings:update. (see [below for nested schema](#nestedatt--metrics))
 - `server` (Boolean)
 - `tags` (Set of String) Unordered assigned tag names, resolved within this project's catalog. Omit to preserve remote assignments after import, during unrelated updates, or when relinquishing ownership; set [] to clear all. An explicit nonempty set detects and corrects assignment drift. Names must already exist; assignment never creates tags. Reference configdirector_tag.<name>.name for creation and rename ordering. Equivalent names share one assignment and retain configured spelling while the assigned tag IDs are unchanged. Resolving names requires tags:read; creating a config, tagged or not, requires configs:create; changing assignments requires config-settings:update. Reads and data sources show assigned names under configs:read alone.
 - `type_options` (Dynamic) Type-specific options for this config, shaped differently depending on "type" (e.g. min/max for integer/float, values for enum, unit for timespan). Not validated by Terraform - the structure you provide is passed through as-is and validated by the API.
@@ -153,6 +168,16 @@ resource "configdirector_config" "pricing_experiment" {
 - `deprecated_keys` (Attributes List) (see [below for nested schema](#nestedatt--deprecated_keys))
 - `id` (String) The ID of this resource.
 - `state` (String)
+
+<a id="nestedatt--metrics"></a>
+### Nested Schema for `metrics`
+
+Optional:
+
+- `metric_id` (String) Required in each metric: the id of a configdirector_metric in the config's project.
+- `primary_kind` (String) The kind the primary metric decides on, one of the kinds its metric reports: "conversion", "count-per-context" or "value-per-context". Only the primary metric has one.
+- `role` (String) Required in each metric: "primary" for the metric and kind that decide the experiment, "secondary" for supporting evidence, or "guardrail" for a metric that must not get worse.
+
 
 <a id="nestedatt--deprecated_keys"></a>
 ### Nested Schema for `deprecated_keys`

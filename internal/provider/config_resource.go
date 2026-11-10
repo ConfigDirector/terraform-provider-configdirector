@@ -67,6 +67,8 @@ type ConfigResourceModel struct {
 	DeprecatedKeys types.List    `tfsdk:"deprecated_keys"`
 	InitialValue   types.Dynamic `tfsdk:"initial_value"`
 	Tags           types.Set     `tfsdk:"tags"`
+	Metrics        types.Set     `tfsdk:"metrics"`
+	Hypothesis     types.String  `tfsdk:"hypothesis"`
 }
 
 func (r *ConfigResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -84,6 +86,49 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 					"An explicit nonempty set detects and corrects assignment drift. Names must already exist; assignment never creates tags. Reference configdirector_tag.<name>.name for creation and rename ordering. " +
 					"Equivalent names share one assignment and retain configured spelling while the assigned tag IDs are unchanged. Resolving names requires tags:read; creating a config, tagged or not, requires configs:create; changing assignments requires config-settings:update. " +
 					"Reads and data sources show assigned names under configs:read alone.",
+			},
+			"metrics": schema.SetNestedAttribute{
+				Optional: true,
+				Computed: true,
+				Description: "The metrics an experiment measures, unordered: up to 10, at most one of them primary. Only an experiment has metrics. " +
+					"Omit to keep the metrics attached in the dashboard or elsewhere, during unrelated updates and after import; set [] to detach every metric. " +
+					"A set of metrics manages exactly those and corrects attachment drift. Creating an experiment with metrics attaches them in a second request " +
+					"once the experiment exists; when that request fails, the experiment is replaced on the next apply. Attaching metrics requires config-settings:update.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"metric_id": schema.StringAttribute{
+							Optional:    true,
+							Computed:    true,
+							Description: "Required in each metric: the id of a configdirector_metric in the config's project.",
+							Validators:  []validator.String{requiredInEachMetric{setting: "a metric_id"}},
+						},
+						"role": schema.StringAttribute{
+							Optional: true,
+							Computed: true,
+							Description: "Required in each metric: \"primary\" for the metric and kind that decide the experiment, " +
+								"\"secondary\" for supporting evidence, or \"guardrail\" for a metric that must not get worse.",
+							Validators: []validator.String{
+								requiredInEachMetric{setting: "a role"},
+								stringvalidator.OneOf(metricRoles...),
+							},
+						},
+						"primary_kind": schema.StringAttribute{
+							Optional: true,
+							Computed: true,
+							Description: "The kind the primary metric decides on, one of the kinds its metric reports: \"conversion\", " +
+								"\"count-per-context\" or \"value-per-context\". Only the primary metric has one.",
+							Validators: []validator.String{stringvalidator.OneOf(metricKinds...)},
+						},
+					},
+				},
+			},
+			"hypothesis": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Description: "What the team expects the variations to do, up to 1,000 characters. Only an experiment has a hypothesis. " +
+					"Each run keeps the hypothesis as it was when the run started, so changing it changes neither earlier runs nor the run in progress. " +
+					"Omit to keep the current hypothesis; set \"\" to remove it.",
+				Validators: []validator.String{stringvalidator.UTF8LengthAtMost(1000)},
 			},
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -205,7 +250,7 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 }
 
 func (r *ConfigResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
-	return []resource.ConfigValidator{lifetimeMatchesRole{}}
+	return []resource.ConfigValidator{lifetimeMatchesRole{}, metricsAndHypothesisOnlyOnAnExperiment{}}
 }
 
 // variationsRequireExperimentRole rejects a non-null "variations" value
@@ -308,6 +353,12 @@ func configToModel(ctx context.Context, c *client.Config, m *ConfigResourceModel
 		return fmt.Errorf("%v", tagDiags)
 	}
 	m.Tags = tags
+	metrics, metricDiagnostics := configMetricsSetValue(ctx, c.Metrics)
+	if metricDiagnostics.HasError() {
+		return fmt.Errorf("%v", metricDiagnostics)
+	}
+	m.Metrics = metrics
+	m.Hypothesis = declaredOrSaved(m.Hypothesis, savedText(c.Hypothesis))
 
 	typeOptions, err := dynamicFromJSON(c.TypeOptions)
 	if err != nil {
@@ -360,6 +411,8 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 	clientFlag := plan.Client.ValueBool()
 	assignments, tagDiags := configTagsForWrite(ctx, r.client, plan.ProjectId.ValueString(), req.Config, plan.Tags)
 	resp.Diagnostics.Append(tagDiags...)
+	metrics, metricDiagnostics := configMetricsForWrite(ctx, req.Config, plan.Metrics)
+	resp.Diagnostics.Append(metricDiagnostics...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -375,10 +428,20 @@ func (r *ConfigResource) Create(ctx context.Context, req resource.CreateRequest,
 		Variations:   variations,
 		DefaultValue: defaultVal,
 		TagIDs:       assignments.ids,
+		Hypothesis:   stringPtrFromValue(plan.Hypothesis),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error Creating Config", configWriteError(err, "configs:create"))
 		return
+	}
+
+	if metrics != nil && len(*metrics) > 0 {
+		withMetrics, err := r.client.UpdateConfigMetrics(ctx, plan.ProjectId.ValueString(), cfg.Key, *metrics)
+		if err != nil {
+			resp.Diagnostics.AddError("Error Attaching Metrics", configWriteError(err, "config-settings:update and configs:read"))
+		} else {
+			cfg = withMetrics
+		}
 	}
 
 	if err := configToModel(ctx, cfg, &plan, assignments); err != nil {
@@ -449,6 +512,8 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("lifetime"), &configuredLifetime)...)
 	assignments, tagDiags := configTagsForWrite(ctx, r.client, plan.ProjectId.ValueString(), req.Config, plan.Tags)
 	resp.Diagnostics.Append(tagDiags...)
+	metrics, metricDiagnostics := configMetricsForWrite(ctx, req.Config, plan.Metrics)
+	resp.Diagnostics.Append(metricDiagnostics...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -463,6 +528,8 @@ func (r *ConfigResource) Update(ctx context.Context, req resource.UpdateRequest,
 		Server:      plan.Server.ValueBool(),
 		Client:      plan.Client.ValueBool(),
 		TagIDs:      assignments.ids,
+		Metrics:     metrics,
+		Hypothesis:  stringPtrFromValue(plan.Hypothesis),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Error Updating Config", configWriteError(err, "config-settings:update and configs:read"))

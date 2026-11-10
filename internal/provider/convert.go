@@ -29,6 +29,13 @@ func stringPtrValue(s *string) types.String {
 	return types.StringValue(*s)
 }
 
+func savedText(text *string) string {
+	if text == nil {
+		return ""
+	}
+	return *text
+}
+
 func boolValue(b bool) types.Bool {
 	return types.BoolValue(b)
 }

@@ -10,16 +10,17 @@ import (
 )
 
 type configRole struct {
-	nameWithArticle string
-	decidedLifetime string
-	canBecome       string
+	nameWithArticle         string
+	decidedLifetime         string
+	canBecome               string
+	hasMetricsAndHypothesis bool
 }
 
 var configRoles = map[string]configRole{
 	"config":      {nameWithArticle: "A config"},
 	"flag":        {nameWithArticle: "A feature flag", decidedLifetime: "temporary", canBecome: "kill-switch"},
 	"kill-switch": {nameWithArticle: "A kill switch", decidedLifetime: "permanent", canBecome: "flag"},
-	"experiment":  {nameWithArticle: "An experiment", decidedLifetime: "temporary"},
+	"experiment":  {nameWithArticle: "An experiment", decidedLifetime: "temporary", hasMetricsAndHypothesis: true},
 }
 
 func (role configRole) decidesLifetime() bool {
@@ -47,6 +48,34 @@ func (v lifetimeMatchesRole) ValidateResource(ctx context.Context, req resource.
 	role := configRoles[roleName.ValueString()]
 	if role.decidesLifetime() && lifetime.ValueString() != role.decidedLifetime {
 		resp.Diagnostics.AddAttributeError(path.Root("lifetime"), "Invalid lifetime", role.nameWithArticle+" is always "+role.decidedLifetime+".")
+	}
+}
+
+type metricsAndHypothesisOnlyOnAnExperiment struct{}
+
+func (v metricsAndHypothesisOnlyOnAnExperiment) Description(ctx context.Context) string {
+	return "metrics and hypothesis can only be set when role is \"experiment\""
+}
+
+func (v metricsAndHypothesisOnlyOnAnExperiment) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v metricsAndHypothesisOnlyOnAnExperiment) ValidateResource(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var roleName, hypothesis types.String
+	var metrics types.Set
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("role"), &roleName)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("metrics"), &metrics)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("hypothesis"), &hypothesis)...)
+	if resp.Diagnostics.HasError() || roleName.IsUnknown() || configRoles[roleName.ValueString()].hasMetricsAndHypothesis {
+		return
+	}
+
+	if len(metrics.Elements()) > 0 {
+		resp.Diagnostics.AddAttributeError(path.Root("metrics"), "Invalid metrics", "Only an experiment can have metrics.")
+	}
+	if trimJavaScriptWhitespace(hypothesis.ValueString()) != "" {
+		resp.Diagnostics.AddAttributeError(path.Root("hypothesis"), "Invalid hypothesis", "Only an experiment can have a hypothesis.")
 	}
 }
 
