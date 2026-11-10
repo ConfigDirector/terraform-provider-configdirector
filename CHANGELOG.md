@@ -4,6 +4,8 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-10
+
 ### Added
 
 - `configdirector_metric` manages a metric, what an experiment measures: one tracked event name per project, with its `direction`, the `kinds` its results report and an optional `description`, which leaving out removes. Changing `event_name` replaces the metric, and the experiments that reference it attach the new one in the same apply. Destroying or replacing a metric fails with ConfigDirector's message while an experiment it is attached to has an open run: stop or ship the run first. To remove such a metric, you can also detach it in one apply and remove it in the next. Import a metric with `<project_id_or_slug>/<event_name>`; only the first slash separates the project from the event name. The API token needs `metrics:read`, `metrics:create`, `metrics:update` and `metrics:delete`.
