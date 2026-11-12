@@ -161,9 +161,11 @@ These examples work with the same provider address in Terraform and OpenTofu.
 
 ## Measuring experiments with metrics
 
-Use `configdirector_metric` to define what an experiment measures: one tracked event name per project, whether a
-higher or a lower number is better, and the kinds its results report. Attach metrics to an experiment with `metrics`
-on `configdirector_config`, and write what the team expects in `hypothesis`:
+Use `configdirector_metric` to define what an experiment measures: a tracked event name, whether a higher or a lower
+number is better, and the kinds its results report. A metric can also count only the events whose details match a
+`filter`, and sum a `value_field` from the details in place of the event's value, so one event name can have several
+metrics. Attach metrics to an experiment with `metrics` on `configdirector_config`, and write what the team expects in
+`hypothesis`:
 
 ```hcl
 resource "configdirector_metric" "checkout_completed" {
@@ -171,6 +173,17 @@ resource "configdirector_metric" "checkout_completed" {
   event_name = "checkout_completed"
   direction  = "higher-is-better"
   kinds      = ["conversion", "value-per-context"]
+}
+
+resource "configdirector_metric" "team_checkout_items" {
+  project_id = configdirector_project.example.id
+  event_name = "checkout_completed"
+  filter = [
+    { field = "/plan", target_type = "text", operator = "is one of", target_values = ["team", "enterprise"] },
+  ]
+  value_field = "/items"
+  direction   = "higher-is-better"
+  kinds       = ["value-per-context"]
 }
 
 resource "configdirector_config" "checkout_button_copy" {
@@ -186,9 +199,16 @@ resource "configdirector_config" "checkout_button_copy" {
   ]
   metrics = [
     { metric_id = configdirector_metric.checkout_completed.id, role = "primary", primary_kind = "conversion" },
+    { metric_id = configdirector_metric.team_checkout_items.id, role = "secondary" },
   ]
 }
 ```
+
+Each condition in `filter` reads a detail field with a JSON pointer, such as `/plan`, and compares it as `text`
+(`is one of`, `is NOT one of`), a `number` (`=`, `!=`, `>`, `>=`, `<`, `<=`) or a `boolean` (`equals`). An event counts
+when it matches every condition, up to 5. A metric with a `value_field` reports `value-per-context`, and a metric with a
+filter or a value field counts the events reported from the moment it is attached to an experiment. A condition or a
+value field that ConfigDirector would refuse fails the plan.
 
 Each metric in `metrics` has a `role`: one `primary` metric with the `primary_kind` that decides the experiment, and
 the rest `secondary` or `guardrail`, up to 10 in all. Leave `metrics` out to keep the metrics attached in the
@@ -197,9 +217,11 @@ dashboard, or set `metrics = []` to detach them all. Leaving `hypothesis` out ke
 role fails the plan. An experiment created with metrics gets them in a second request; if that request fails, the next apply
 replaces the new experiment.
 
-Changing a metric's `event_name` replaces it, and the experiments that reference it attach the new one in the same
-apply. Destroying a metric fails while an experiment it is attached to has an open run, and so does replacing it: stop
-or ship the run first. To remove such a metric, you can also detach it in one apply and remove it in the next. Import a metric with `<project_id_or_slug>/<event_name>`.
+Changing a metric's `event_name`, `filter` or `value_field` replaces it, and the experiments that reference it attach
+the new one in the same apply. Destroying a metric fails while an experiment it is attached to has an open run, and so
+does replacing it: stop or ship the run first. To remove such a metric, you can also detach it in one apply and remove
+it in the next. Import a metric with `<project_id_or_slug>/<metric_id>`, or with `<project_id_or_slug>/<event_name>`
+while the event name has one metric; when several metrics share it, the import fails and lists their ids.
 The API token needs `metrics:read`, `metrics:create`, `metrics:update` and `metrics:delete`, and changing an
 experiment's metrics or hypothesis needs `config-settings:update`. See the
 [metric resource reference](docs/resources/metric.md) and

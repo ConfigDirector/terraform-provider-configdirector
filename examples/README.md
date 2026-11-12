@@ -20,8 +20,9 @@ get pulled directly into the generated provider docs.
     a segment with two condition groups and an environment override, used by
     a targeting rule through a segment condition
   - [configdirector_metric](resources/configdirector_metric/resource.tf) -
-    two metrics attached to an experiment, one as its primary metric and one
-    as a guardrail
+    three metrics attached to an experiment: its primary metric, a secondary
+    metric on the same event name with a filter and a value field, and a
+    guardrail
   - [configdirector_tag](resources/configdirector_tag/resource.tf) -
     a shared project tag with spaces and punctuation in its name
   - [configdirector_webhook](resources/configdirector_webhook/resource.tf) -

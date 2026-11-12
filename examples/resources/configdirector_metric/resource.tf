@@ -2,7 +2,7 @@ terraform {
   required_providers {
     configdirector = {
       source  = "ConfigDirector/configdirector"
-      version = "~> 0.8"
+      version = "~> 0.9"
     }
   }
 }
@@ -26,6 +26,21 @@ resource "configdirector_metric" "checkout_completed" {
   kinds       = ["conversion", "value-per-context"]
 }
 
+# A metric can count only the events whose details match a filter, and sum a
+# detail field in place of the event's value: here, checkouts on the team or
+# enterprise plan, and the items each exposed context bought in them. A metric
+# keeps its filter and value field, so changing either replaces the metric.
+resource "configdirector_metric" "team_checkout_items" {
+  project_id = configdirector_project.example.id
+  event_name = "checkout_completed"
+  filter = [
+    { field = "/plan", target_type = "text", operator = "is one of", target_values = ["team", "enterprise"] },
+  ]
+  value_field = "/items"
+  direction   = "higher-is-better"
+  kinds       = ["conversion", "value-per-context"]
+}
+
 # A metric a team watches so that it does not get worse: failed checkouts per
 # exposed context.
 resource "configdirector_metric" "checkout_failed" {
@@ -36,7 +51,8 @@ resource "configdirector_metric" "checkout_failed" {
 }
 
 # An experiment attaches metrics by id. One primary metric and kind decide the
-# experiment; a guardrail must not get worse.
+# experiment; a secondary metric adds evidence, and a guardrail must not get
+# worse.
 resource "configdirector_config" "checkout_button_copy" {
   project_id = configdirector_project.example.id
   key        = "checkout-button-copy"
@@ -51,6 +67,7 @@ resource "configdirector_config" "checkout_button_copy" {
 
   metrics = [
     { metric_id = configdirector_metric.checkout_completed.id, role = "primary", primary_kind = "conversion" },
+    { metric_id = configdirector_metric.team_checkout_items.id, role = "secondary" },
     { metric_id = configdirector_metric.checkout_failed.id, role = "guardrail" },
   ]
 

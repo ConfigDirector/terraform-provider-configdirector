@@ -3,12 +3,12 @@
 page_title: "configdirector_metric Resource - terraform-provider-configdirector"
 subcategory: ""
 description: |-
-  A metric: what an experiment measures, defined once per project for one tracked event name, and attached to any of the project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id attribute. Destroying a metric detaches it from its experiments, and fails while an experiment it is attached to has an open run. Import with project_id_or_slug/event_name: only the first slash separates the project from the event name, which is taken literally. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.
+  A metric: what an experiment measures, defined in a project for one tracked event name, and attached to any of the project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id attribute. A metric can count only the events whose details match a filter, and sum a detail field in place of the event's value, so a project can have several metrics on one event name, each with its own filter or value field. A metric with a filter or a value field counts the events reported from the moment it is attached to an experiment, never earlier ones. Destroying a metric detaches it from its experiments, and fails while an experiment it is attached to has an open run. Import with project_id_or_slug/metric_id, or with project_id_or_slug/event_name while the event name has one metric: only the first slash separates the project from the rest, which is read as a metric id when it is a UUID and otherwise as an event name, taken literally. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.
 ---
 
 # configdirector_metric (Resource)
 
-A metric: what an experiment measures, defined once per project for one tracked event name, and attached to any of the project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id attribute. Destroying a metric detaches it from its experiments, and fails while an experiment it is attached to has an open run. Import with project_id_or_slug/event_name: only the first slash separates the project from the event name, which is taken literally. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.
+A metric: what an experiment measures, defined in a project for one tracked event name, and attached to any of the project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id attribute. A metric can count only the events whose details match a filter, and sum a detail field in place of the event's value, so a project can have several metrics on one event name, each with its own filter or value field. A metric with a filter or a value field counts the events reported from the moment it is attached to an experiment, never earlier ones. Destroying a metric detaches it from its experiments, and fails while an experiment it is attached to has an open run. Import with project_id_or_slug/metric_id, or with project_id_or_slug/event_name while the event name has one metric: only the first slash separates the project from the rest, which is read as a metric id when it is a UUID and otherwise as an event name, taken literally. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.
 
 ## Example Usage
 
@@ -17,7 +17,7 @@ terraform {
   required_providers {
     configdirector = {
       source  = "ConfigDirector/configdirector"
-      version = "~> 0.8"
+      version = "~> 0.9"
     }
   }
 }
@@ -41,6 +41,21 @@ resource "configdirector_metric" "checkout_completed" {
   kinds       = ["conversion", "value-per-context"]
 }
 
+# A metric can count only the events whose details match a filter, and sum a
+# detail field in place of the event's value: here, checkouts on the team or
+# enterprise plan, and the items each exposed context bought in them. A metric
+# keeps its filter and value field, so changing either replaces the metric.
+resource "configdirector_metric" "team_checkout_items" {
+  project_id = configdirector_project.example.id
+  event_name = "checkout_completed"
+  filter = [
+    { field = "/plan", target_type = "text", operator = "is one of", target_values = ["team", "enterprise"] },
+  ]
+  value_field = "/items"
+  direction   = "higher-is-better"
+  kinds       = ["conversion", "value-per-context"]
+}
+
 # A metric a team watches so that it does not get worse: failed checkouts per
 # exposed context.
 resource "configdirector_metric" "checkout_failed" {
@@ -51,7 +66,8 @@ resource "configdirector_metric" "checkout_failed" {
 }
 
 # An experiment attaches metrics by id. One primary metric and kind decide the
-# experiment; a guardrail must not get worse.
+# experiment; a secondary metric adds evidence, and a guardrail must not get
+# worse.
 resource "configdirector_config" "checkout_button_copy" {
   project_id = configdirector_project.example.id
   key        = "checkout-button-copy"
@@ -66,6 +82,7 @@ resource "configdirector_config" "checkout_button_copy" {
 
   metrics = [
     { metric_id = configdirector_metric.checkout_completed.id, role = "primary", primary_kind = "conversion" },
+    { metric_id = configdirector_metric.team_checkout_items.id, role = "secondary" },
     { metric_id = configdirector_metric.checkout_failed.id, role = "guardrail" },
   ]
 
@@ -79,17 +96,29 @@ resource "configdirector_config" "checkout_button_copy" {
 ### Required
 
 - `direction` (String) Whether a higher or a lower number is better: "higher-is-better" or "lower-is-better".
-- `event_name` (String) The name of the tracked event the metric measures, exactly as the application reports it, letter case included. A project has one metric per event name. A metric keeps its event name, so changing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run.
-- `kinds` (Set of String) What the metric reports, at least one of: "conversion" (the share of exposed contexts that reported the event at least once), "count-per-context" (the events each exposed context reported, averaged) and "value-per-context" (the sum of the event's value per exposed context, averaged). The primary metric of an experiment decides on one of these kinds.
+- `event_name` (String) The name of the tracked event the metric measures, exactly as the application reports it, letter case included. A metric keeps its event name, so changing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run.
+- `kinds` (Set of String) What the metric reports, at least one of: "conversion" (the share of exposed contexts that reported the event at least once), "count-per-context" (the events each exposed context reported, averaged) and "value-per-context" (the sum of the event's value, or of its value_field, per exposed context, averaged). The primary metric of an experiment decides on one of these kinds.
 - `project_id` (String) ID of the project this metric belongs to. Changing the project replaces the metric.
 
 ### Optional
 
 - `description` (String) What the metric measures, up to 1,000 characters. Leaving it out removes the description.
+- `filter` (Attributes Set) The conditions an event's details must all match for the event to count, unordered: 1 to 5. Leave filter out to count every event with the event name. A metric keeps its filter, so changing, adding or removing a condition replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first. (see [below for nested schema](#nestedatt--filter))
+- `value_field` (String) The detail field whose number the metric sums in place of the event's value, as a JSON pointer into the event's details (RFC 6901), such as /items, up to 500 characters. An event whose field is missing or not a number counts as an event and adds nothing to the sum. A metric with a value field reports "value-per-context", so kinds must include it. A metric keeps its value field, so changing, adding or removing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first.
 
 ### Read-Only
 
 - `id` (String) The metric's id, referenced as metric_id in the metrics of configdirector_config.
+
+<a id="nestedatt--filter"></a>
+### Nested Schema for `filter`
+
+Required:
+
+- `field` (String) The detail field the condition reads, as a JSON pointer into the event's details (RFC 6901), such as /plan or /address/country, up to 500 characters. An event without the field matches only the "is NOT one of" and "!=" operators.
+- `operator` (String) For text, "is one of" or "is NOT one of"; for number, "=", "!=", ">", ">=", "<" or "<="; for boolean, "equals".
+- `target_type` (String) How the condition compares the field: "text", "number" or "boolean".
+- `target_values` (Set of String) What the field is compared with: for text, 1 to 20 values of up to 500 characters each; for number, one number, such as "2" or "9.99"; for boolean, "true" or "false".
 
 ## Import
 
@@ -99,18 +128,28 @@ In Terraform v1.5.0 and later, the [`import` block](https://developer.hashicorp.
 
 ```terraform
 import {
-  to = configdirector_metric.checkout_completed
-  id = "metric-example/checkout_completed"
+  to = configdirector_metric.team_checkout_items
+  id = "metric-example/0b9d6c1e-58a4-4c39-9a7e-3f1c2d5e8b01"
+}
+
+import {
+  to = configdirector_metric.checkout_failed
+  id = "metric-example/checkout_failed"
 }
 ```
 
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# <project_id_or_slug>/<event_name> - the project half accepts either its UUID
-# or its slug. Only the first slash separates the project from the event name,
-# which is taken literally, letter case included.
-terraform import configdirector_metric.checkout_completed metric-example/checkout_completed
+# <project_id_or_slug>/<metric_id> - the project half accepts either its UUID
+# or its slug. The metric's id ends the address of its page in the dashboard.
+terraform import configdirector_metric.team_checkout_items metric-example/0b9d6c1e-58a4-4c39-9a7e-3f1c2d5e8b01
 
-tofu import configdirector_metric.checkout_completed metric-example/checkout_completed
+# <project_id_or_slug>/<event_name> - while the event name has one metric. Only
+# the first slash separates the project from the event name, which is taken
+# literally, letter case included. When several metrics share the event name,
+# the import fails and lists their ids.
+terraform import configdirector_metric.checkout_failed metric-example/checkout_failed
+
+tofu import configdirector_metric.checkout_failed metric-example/checkout_failed
 ```

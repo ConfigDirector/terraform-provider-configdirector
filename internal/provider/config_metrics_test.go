@@ -333,7 +333,7 @@ func TestAccConfigMetrics_experimentWhoseMetricsAreRefusedOnCreateIsReplacedOnTh
     { metric_id = configdirector_metric.failures.id, role = "primary", primary_kind = "conversion" },
   ]
 `),
-				ExpectError: regexp.MustCompile(`The\s+metric\s+for\s+checkout_failed\s+does\s+not\s+report\s+conversion`),
+				ExpectError: regexp.MustCompile(`The\s+metric\s+checkout_failed\s+does\s+not\s+report\s+conversion,\s+so\s+that\s+cannot\s+be\s+its\s+primary\s+kind`),
 			},
 			{
 				Config: experimentTestConfig(p, `

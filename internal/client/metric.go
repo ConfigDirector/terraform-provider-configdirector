@@ -20,23 +20,34 @@ type metricUsage struct {
 	OpenRuns    []metricOpenRun `json:"openRuns"`
 }
 
+type MetricFilterCondition struct {
+	Field        string   `json:"field"`
+	TargetType   string   `json:"targetType"`
+	Operator     string   `json:"operator"`
+	TargetValues []string `json:"targetValues"`
+}
+
 type Metric struct {
-	ID          string        `json:"id"`
-	ProjectID   string        `json:"projectId"`
-	EventName   string        `json:"eventName"`
-	Description *string       `json:"description"`
-	Direction   string        `json:"direction"`
-	Kinds       []string      `json:"kinds"`
-	Usages      []metricUsage `json:"usages"`
-	CreatedAt   string        `json:"createdAt"`
-	UpdatedAt   string        `json:"updatedAt"`
+	ID          string                  `json:"id"`
+	ProjectID   string                  `json:"projectId"`
+	EventName   string                  `json:"eventName"`
+	Filter      []MetricFilterCondition `json:"filter"`
+	ValueField  *string                 `json:"valueField"`
+	Description *string                 `json:"description"`
+	Direction   string                  `json:"direction"`
+	Kinds       []string                `json:"kinds"`
+	Usages      []metricUsage           `json:"usages"`
+	CreatedAt   string                  `json:"createdAt"`
+	UpdatedAt   string                  `json:"updatedAt"`
 }
 
 type CreateMetricRequest struct {
-	EventName   string   `json:"eventName"`
-	Description *string  `json:"description"`
-	Direction   string   `json:"direction"`
-	Kinds       []string `json:"kinds"`
+	EventName   string                  `json:"eventName"`
+	Filter      []MetricFilterCondition `json:"filter"`
+	ValueField  *string                 `json:"valueField"`
+	Description *string                 `json:"description"`
+	Direction   string                  `json:"direction"`
+	Kinds       []string                `json:"kinds"`
 }
 
 type UpdateMetricRequest struct {

@@ -4,6 +4,15 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+### Added
+
+- `configdirector_metric` takes a `filter` and a `value_field`, so a project can have several metrics on one event name. A metric with a `filter` counts only the events whose details match every condition, up to 5: each has a `field`, a JSON pointer into the event's details such as `/plan`, a `target_type` of `text`, `number` or `boolean`, an `operator` for that type, and its `target_values`. A `value_field` sums a number from the event's details in place of the event's value, and needs `value-per-context` among `kinds`. A metric with a filter or a value field counts the events reported from the moment it is attached to an experiment. A metric keeps both, so changing, adding or removing a condition or the value field replaces the metric, which fails while an experiment it is attached to has an open run: stop the run first. A condition or a value field that ConfigDirector would refuse, such as a sixth condition, an operator of another target type or a value field without `value-per-context`, fails the plan.
+- Import a metric by its id with `<project_id_or_slug>/<metric_id>`.
+
+### Changed
+
+- Importing a metric with `<project_id_or_slug>/<event_name>` fails when several metrics share the event name, and the error lists each one's id with its filter and value field, such as `checkout_completed · /plan is one of [team] · value from /items`. Before, the import took one of them. A part after the slash that is a UUID is now read as a metric id.
+
 ## [0.8.0] - 2026-11-10
 
 ### Added
