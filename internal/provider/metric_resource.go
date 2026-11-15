@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -29,8 +27,8 @@ var (
 )
 
 var (
-	metricDirections = []string{"higher-is-better", "lower-is-better"}
-	metricKinds      = []string{"conversion", "count-per-context", "value-per-context"}
+	metricDirections    = []string{"higher-is-better", "lower-is-better"}
+	oneEventMetricKinds = []string{"conversion", "count-per-context", "value-per-context"}
 )
 
 func newMetricResource() resource.Resource {
@@ -47,6 +45,9 @@ type metricModel struct {
 	EventName   types.String `tfsdk:"event_name"`
 	Filter      types.Set    `tfsdk:"filter"`
 	ValueField  types.String `tfsdk:"value_field"`
+	Ratio       types.Object `tfsdk:"ratio"`
+	Funnel      types.Object `tfsdk:"funnel"`
+	Retention   types.Object `tfsdk:"retention"`
 	Description types.String `tfsdk:"description"`
 	Direction   types.String `tfsdk:"direction"`
 	Kinds       types.Set    `tfsdk:"kinds"`
@@ -58,17 +59,19 @@ func (r *metricResource) Metadata(ctx context.Context, req resource.MetadataRequ
 
 func (r *metricResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "A metric: what an experiment measures, defined in a project for one tracked event name, and " +
-			"attached to any of the project's experiments through the metrics of configdirector_config, whose " +
-			"metric_id is this resource's id attribute. A metric can count only the events whose details match a " +
-			"filter, and sum a detail field in place of the event's value, so a project can have several metrics on " +
-			"one event name, each with its own filter or value field. A metric with a filter or a value field counts " +
-			"the events reported from the moment it is attached to an experiment, never earlier ones. Destroying a " +
-			"metric detaches it from its experiments, and fails while an experiment it is attached to has an open " +
-			"run. Import with project_id_or_slug/metric_id, or with project_id_or_slug/event_name while the event " +
-			"name has one metric: only the first slash separates the project from the rest, which is read as a " +
-			"metric id when it is a UUID and otherwise as an event name, taken literally. The API token needs " +
-			"metrics:read, metrics:create, metrics:update and metrics:delete.",
+		Description: "A metric: what an experiment measures, defined in a project, and attached to any of the " +
+			"project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id " +
+			"attribute. A metric is one tracked event name, given by event_name, or a ratio, a funnel or a retention, " +
+			"each given by the attribute of that name in place of event_name. A metric can count only the events whose " +
+			"details match a filter, and sum a detail field in place of the event's value, so a project can have " +
+			"several metrics on one event name, each with its own filter or value field. A metric with a filter or a " +
+			"value field, and every ratio, funnel and retention metric, counts the events reported from the moment it " +
+			"is attached to an experiment, never earlier ones. Destroying a metric detaches it from its experiments, " +
+			"and fails while an experiment it is attached to has an open run. Import with " +
+			"project_id_or_slug/metric_id, or with project_id_or_slug/event_name while the event name has one metric: " +
+			"only the first slash separates the project from the rest, which is read as a metric id when it is a UUID " +
+			"and otherwise as an event name, taken literally. A ratio, funnel or retention metric is imported by its " +
+			"id. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -81,73 +84,37 @@ func (r *metricResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"event_name": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 				Description: "The name of the tracked event the metric measures, exactly as the application reports it, " +
-					"letter case included. A metric keeps its event name, so changing it replaces the metric, which " +
-					"detaches the old one from its experiments and fails while one of them has an open run.",
-				Validators:    []validator.String{stringvalidator.UTF8LengthBetween(1, 150)},
+					"letter case included. Required unless the metric is a ratio, a funnel or a retention, which leave it " +
+					"out. A metric keeps its event name, so changing it replaces the metric, which detaches the old one " +
+					"from its experiments and fails while one of them has an open run.",
+				Validators:    []validator.String{stringvalidator.UTF8LengthBetween(1, eventNameMaximumCharacters)},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
-			"filter": schema.SetNestedAttribute{
-				Optional: true,
-				Description: "The conditions an event's details must all match for the event to count, unordered: 1 to 5. " +
-					"Leave filter out to count every event with the event name. A metric keeps its filter, so changing, " +
-					"adding or removing a condition replaces the metric, which detaches the old one from its experiments " +
-					"and fails while one of them has an open run: stop the run first.",
-				PlanModifiers: []planmodifier.Set{setplanmodifier.RequiresReplace()},
-				Validators:    []validator.Set{metricFilterHasConditions{}, setvalidator.SizeAtMost(metricFilterConditionsLimit)},
-				NestedObject: schema.NestedAttributeObject{
-					Validators: []validator.Object{metricFilterConditionFitsItsTargetType{}},
-					Attributes: map[string]schema.Attribute{
-						"field": schema.StringAttribute{
-							Required: true,
-							Description: "The detail field the condition reads, as a JSON pointer into the event's details " +
-								"(RFC 6901), such as /plan or /address/country, up to 500 characters. An event without the " +
-								"field matches only the \"is NOT one of\" and \"!=\" operators.",
-							Validators: []validator.String{
-								stringvalidator.UTF8LengthAtMost(detailFieldMaximumCharacters),
-								detailFieldIsAJSONPointer{},
-							},
-						},
-						"target_type": schema.StringAttribute{
-							Required:    true,
-							Description: "How the condition compares the field: \"text\", \"number\" or \"boolean\".",
-							Validators:  []validator.String{stringvalidator.OneOf(slices.Sorted(maps.Keys(metricFilterTargetTypes))...)},
-						},
-						"operator": schema.StringAttribute{
-							Required: true,
-							Description: "For text, \"is one of\" or \"is NOT one of\"; for number, \"=\", \"!=\", " +
-								"\">\", \">=\", \"<\" or \"<=\"; for boolean, \"equals\".",
-						},
-						"target_values": schema.SetAttribute{
-							Required:    true,
-							ElementType: types.StringType,
-							Description: "What the field is compared with: for text, 1 to 20 values of up to 500 characters " +
-								"each; for number, one number, such as \"2\" or \"9.99\"; for boolean, \"true\" or \"false\".",
-							Validators: []validator.Set{
-								setvalidator.ValueStringsAre(
-									targetValueIsNotBlank{},
-									stringvalidator.UTF8LengthAtMost(targetValueMaximumCharacters),
-								),
-							},
-						},
-					},
-				},
-			},
+			"filter": metricFilterAttribute(
+				"The conditions an event's details must all match for the event to count, unordered: 1 to 5. "+
+					"Leave filter out to count every event with the event name. Only a metric with an event_name takes "+
+					"one: a ratio, a funnel or a retention has a filter wherever it names an event. A metric keeps its "+
+					"filter, so changing, adding or removing a condition replaces the metric, which detaches the old one "+
+					"from its experiments and fails while one of them has an open run: stop the run first.",
+				setplanmodifier.RequiresReplace(),
+			),
 			"value_field": schema.StringAttribute{
 				Optional: true,
 				Description: "The detail field whose number the metric sums in place of the event's value, as a JSON " +
 					"pointer into the event's details (RFC 6901), such as /items, up to 500 characters. An event whose " +
-					"field is missing or not a number counts as an event and adds nothing to the sum. A metric with a " +
-					"value field reports \"value-per-context\", so kinds must include it. A metric keeps its value field, " +
-					"so changing, adding or removing it replaces the metric, which detaches the old one from its " +
-					"experiments and fails while one of them has an open run: stop the run first.",
-				Validators: []validator.String{
-					stringvalidator.UTF8LengthAtMost(detailFieldMaximumCharacters),
-					detailFieldIsAJSONPointer{},
-				},
+					"field is missing or not a number counts as an event and adds nothing to the sum. Only a metric " +
+					"with an event_name takes one, and it reports \"value-per-context\", so kinds must include it. A " +
+					"metric keeps its value field, so changing, adding or removing it replaces the metric, which " +
+					"detaches the old one from its experiments and fails while one of them has an open run: stop the " +
+					"run first.",
+				Validators:    detailFieldValidators(),
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
+			"ratio":     metricRatioAttribute(),
+			"funnel":    metricFunnelAttribute(),
+			"retention": metricRetentionAttribute(),
 			"description": schema.StringAttribute{
 				Optional:    true,
 				Description: "What the metric measures, up to 1,000 characters. Leaving it out removes the description.",
@@ -159,23 +126,24 @@ func (r *metricResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Validators:  []validator.String{stringvalidator.OneOf(metricDirections...)},
 			},
 			"kinds": schema.SetAttribute{
-				Required:    true,
+				Optional:    true,
+				Computed:    true,
 				ElementType: types.StringType,
-				Description: "What the metric reports, at least one of: \"conversion\" (the share of exposed contexts " +
-					"that reported the event at least once), \"count-per-context\" (the events each exposed context " +
-					"reported, averaged) and \"value-per-context\" (the sum of the event's value, or of its value_field, per " +
-					"exposed context, averaged). The primary metric of an experiment decides on one of these kinds.",
-				Validators: []validator.Set{
-					setvalidator.SizeAtLeast(1),
-					setvalidator.ValueStringsAre(stringvalidator.OneOf(metricKinds...)),
-				},
+				Description: "What a metric with an event_name reports, at least one of: \"conversion\" (the share of " +
+					"exposed contexts that reported the event at least once), \"count-per-context\" (the events each " +
+					"exposed context reported, averaged) and \"value-per-context\" (the sum of the event's value, or of " +
+					"its value_field, per exposed context, averaged). The primary metric of an experiment decides on one " +
+					"of these kinds. Required with an event_name. A ratio, a funnel or a retention leaves kinds out and " +
+					"reports its own kind alone, which kinds then shows: \"ratio\", \"funnel\" or \"retention\".",
+				Validators:    []validator.Set{setvalidator.SizeAtLeast(1), kindsAreThoseOfAMetricOfOneEventName{}},
+				PlanModifiers: []planmodifier.Set{kindOfTheDeclaredDefinition{}},
 			},
 		},
 	}
 }
 
 func (r *metricResource) ConfigValidators(ctx context.Context) []resource.ConfigValidator {
-	return []resource.ConfigValidator{valueFieldReportedAsValuePerContext{}}
+	return []resource.ConfigValidator{metricDeclaredAsOneEventNameOrOneDefinition{}, valueFieldReportedAsValuePerContext{}}
 }
 
 func (r *metricResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -193,12 +161,21 @@ func (r *metricResource) Configure(ctx context.Context, req resource.ConfigureRe
 func metricToModel(ctx context.Context, metric *client.Metric, model *metricModel) diag.Diagnostics {
 	model.Id = stringValue(metric.ID)
 	model.ProjectId = stringValue(metric.ProjectID)
-	model.EventName = stringValue(metric.EventName)
+	model.EventName = stringPtrValue(metric.EventName)
 	model.ValueField = stringPtrValue(metric.ValueField)
 	model.Description = declaredOrSaved(model.Description, savedText(metric.Description))
 	model.Direction = stringValue(metric.Direction)
 	filter, diagnostics := metricFilterSetValue(ctx, metric.Filter)
 	model.Filter = filter
+	ratio, ratioDiagnostics := metricRatioObjectValue(ctx, metric.Ratio)
+	model.Ratio = ratio
+	diagnostics.Append(ratioDiagnostics...)
+	funnel, funnelDiagnostics := metricFunnelObjectValue(ctx, metric.Funnel)
+	model.Funnel = funnel
+	diagnostics.Append(funnelDiagnostics...)
+	retention, retentionDiagnostics := metricRetentionObjectValue(ctx, metric.Retention)
+	model.Retention = retention
+	diagnostics.Append(retentionDiagnostics...)
 	kinds, kindsDiagnostics := types.SetValueFrom(ctx, types.StringType, metric.Kinds)
 	model.Kinds = kinds
 	diagnostics.Append(kindsDiagnostics...)
@@ -218,7 +195,13 @@ func (r *metricResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	filter, diagnostics := metricFilterForCreate(ctx, plan.Filter)
+	filter, diagnostics := metricFilterConditionsIn(ctx, plan.Filter)
+	resp.Diagnostics.Append(diagnostics...)
+	ratio, diagnostics := metricRatioForCreate(ctx, plan.Ratio)
+	resp.Diagnostics.Append(diagnostics...)
+	funnel, diagnostics := metricFunnelForCreate(ctx, plan.Funnel)
+	resp.Diagnostics.Append(diagnostics...)
+	retention, diagnostics := metricRetentionForCreate(ctx, plan.Retention)
 	resp.Diagnostics.Append(diagnostics...)
 	kinds, diagnostics := metricKindsFromPlan(ctx, plan)
 	resp.Diagnostics.Append(diagnostics...)
@@ -227,9 +210,12 @@ func (r *metricResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	metric, err := r.client.CreateMetric(ctx, plan.ProjectId.ValueString(), client.CreateMetricRequest{
-		EventName:   plan.EventName.ValueString(),
+		EventName:   stringPtrFromValue(plan.EventName),
 		Filter:      filter,
 		ValueField:  stringPtrFromValue(plan.ValueField),
+		Ratio:       ratio,
+		Funnel:      funnel,
+		Retention:   retention,
 		Description: stringPtrFromValue(plan.Description),
 		Direction:   plan.Direction.ValueString(),
 		Kinds:       kinds,

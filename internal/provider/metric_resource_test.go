@@ -28,6 +28,15 @@ resource "configdirector_metric" "test" {
 `, eventName, body)
 }
 
+func metricDeclaredAs(p testAccProject, body string) string {
+	return p.config("test") + fmt.Sprintf(`
+resource "configdirector_metric" "test" {
+  project_id = configdirector_project.test.id
+%s
+}
+`, body)
+}
+
 func savedMetricAt(s *terraform.State, address string) (*client.Metric, error) {
 	resourceState, found := s.RootModule().Resources[address]
 	if !found {
@@ -54,14 +63,56 @@ func sameFilter(left, right []client.MetricFilterCondition) bool {
 	return slices.Equal(filterAsCompared(left), filterAsCompared(right))
 }
 
+func sameRatioSide(left, right client.MetricRatioSide) bool {
+	return left.EventName == right.EventName &&
+		left.Adds == right.Adds &&
+		sameFilter(left.Filter, right.Filter) &&
+		equalOptionalText(left.ValueField, right.ValueField)
+}
+
+func sameRatio(left, right *client.MetricRatio) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return sameRatioSide(left.Numerator, right.Numerator) && sameRatioSide(left.Denominator, right.Denominator)
+}
+
+func sameFunnel(left, right *client.MetricFunnel) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return slices.EqualFunc(left.Steps, right.Steps, func(leftStep, rightStep client.MetricFunnelStep) bool {
+		return leftStep.EventName == rightStep.EventName && sameFilter(leftStep.Filter, rightStep.Filter)
+	})
+}
+
+func sameRetention(left, right *client.MetricRetention) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.EventName == right.EventName &&
+		sameFilter(left.Filter, right.Filter) &&
+		left.FirstDay == right.FirstDay &&
+		left.LastDay == right.LastDay
+}
+
 func checkSavedMetric(address string, expected client.Metric) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		metric, err := savedMetricAt(s, address)
 		if err != nil {
 			return err
 		}
-		if metric.EventName != expected.EventName {
-			return fmt.Errorf("expected the metric's event name to be %q, the API has %q", expected.EventName, metric.EventName)
+		if !equalOptionalText(metric.EventName, expected.EventName) {
+			return fmt.Errorf("expected the metric's event name to be %s, the API has %s", optionalText(expected.EventName), optionalText(metric.EventName))
+		}
+		if !sameRatio(metric.Ratio, expected.Ratio) {
+			return fmt.Errorf("expected the metric's ratio to be %+v, the API has %+v", expected.Ratio, metric.Ratio)
+		}
+		if !sameFunnel(metric.Funnel, expected.Funnel) {
+			return fmt.Errorf("expected the metric's funnel to be %+v, the API has %+v", expected.Funnel, metric.Funnel)
+		}
+		if !sameRetention(metric.Retention, expected.Retention) {
+			return fmt.Errorf("expected the metric's retention to be %+v, the API has %+v", expected.Retention, metric.Retention)
 		}
 		if !sameFilter(metric.Filter, expected.Filter) {
 			return fmt.Errorf("expected the metric's filter to be %+v, the API has %+v", expected.Filter, metric.Filter)
@@ -118,7 +169,7 @@ func TestAccMetricResource_createAndImport(t *testing.T) {
 					resource.TestCheckResourceAttrSet("configdirector_metric.test", "id"),
 					resource.TestCheckResourceAttr("configdirector_metric.test", "event_name", "checkout_completed"),
 					checkSavedMetric("configdirector_metric.test", client.Metric{
-						EventName:   "checkout_completed",
+						EventName:   stringPointer("checkout_completed"),
 						Description: stringPointer("A customer paid for their order."),
 						Direction:   "higher-is-better",
 						Kinds:       []string{"conversion", "value-per-context"},
@@ -161,7 +212,7 @@ func TestAccMetricResource_updatesInPlace(t *testing.T) {
 					},
 				},
 				Check: checkSavedMetric("configdirector_metric.test", client.Metric{
-					EventName:   "checkout_completed",
+					EventName:   stringPointer("checkout_completed"),
 					Description: stringPointer("A customer paid, refunds excluded."),
 					Direction:   "lower-is-better",
 					Kinds:       []string{"count-per-context", "value-per-context"},
@@ -196,7 +247,7 @@ func TestAccMetricResource_descriptionLeftOutIsRemoved(t *testing.T) {
 					},
 				},
 				Check: checkSavedMetric("configdirector_metric.test", client.Metric{
-					EventName:   "checkout_completed",
+					EventName:   stringPointer("checkout_completed"),
 					Description: nil,
 					Direction:   "higher-is-better",
 					Kinds:       []string{"conversion"},
@@ -243,7 +294,7 @@ func TestAccMetricResource_eventNameChangeReplacesTheMetric(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkSavedMetric("configdirector_metric.test", client.Metric{
-						EventName: "order_completed",
+						EventName: stringPointer("order_completed"),
 						Direction: "higher-is-better",
 						Kinds:     []string{"conversion"},
 					}),
@@ -454,7 +505,7 @@ func TestAccMetricResource_destroyFailsWhileAnExperimentItIsAttachedToHasAnOpenR
 						return nil
 					}),
 					checkSavedMetric("configdirector_metric.test", client.Metric{
-						EventName: "checkout_completed",
+						EventName: stringPointer("checkout_completed"),
 						Direction: "higher-is-better",
 						Kinds:     []string{"conversion"},
 					}),
@@ -587,7 +638,7 @@ func TestAccMetricResource_importOfAnEventNameWithTwoMetricsFailsListingTheirIds
 		}
 	})
 	filteredMetric, err := api.CreateMetric(context.Background(), project.ID, client.CreateMetricRequest{
-		EventName: "checkout_completed",
+		EventName: stringPointer("checkout_completed"),
 		Filter: []client.MetricFilterCondition{
 			{Field: "/plan", TargetType: "text", Operator: "is one of", TargetValues: []string{"team", "enterprise"}},
 			{Field: "/items", TargetType: "number", Operator: ">=", TargetValues: []string{"2"}},
@@ -600,7 +651,7 @@ func TestAccMetricResource_importOfAnEventNameWithTwoMetricsFailsListingTheirIds
 		t.Fatalf("creating the filtered metric: %s", err)
 	}
 	itemsMetric, err := api.CreateMetric(context.Background(), project.ID, client.CreateMetricRequest{
-		EventName:  "checkout_completed",
+		EventName:  stringPointer("checkout_completed"),
 		ValueField: stringPointer("/items"),
 		Direction:  "higher-is-better",
 		Kinds:      []string{"value-per-context"},
@@ -633,4 +684,49 @@ func TestAccMetricResource_importOfAnEventNameWithTwoMetricsFailsListingTheirIds
 	if !slices.Contains(detailLines, itemsMetricLine) {
 		t.Errorf("expected the error to list %q, got %q", itemsMetricLine, imported.Diagnostics[0].Detail)
 	}
+}
+
+func TestAccMetricResource_aConfigurationWrittenForProvider090PlansNoChangeAfterTheUpgrade(t *testing.T) {
+	p := newTestAccProject(t)
+	t.Setenv(resource.EnvTfAccProviderNamespace, "configdirector")
+
+	configurationWrittenFor090 := experimentTestConfig(p, `
+  metrics = [
+    { metric_id = configdirector_metric.checkout.id, role = "primary", primary_kind = "conversion" },
+    { metric_id = configdirector_metric.team_items.id, role = "secondary" },
+    { metric_id = configdirector_metric.failures.id, role = "guardrail" },
+  ]
+`) + `
+resource "configdirector_metric" "team_items" {
+  project_id = configdirector_project.test.id
+  event_name = "checkout_completed"
+  filter = [
+    { field = "/plan", target_type = "text", operator = "is one of", target_values = ["team", "enterprise"] },
+    { field = "/items", target_type = "number", operator = ">=", target_values = ["2"] },
+  ]
+  value_field = "/items"
+  description = "Items bought on the Team and Enterprise plans."
+  direction   = "higher-is-better"
+  kinds       = ["value-per-context"]
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"configdirector": {Source: "ConfigDirector/configdirector", VersionConstraint: "0.9.0"},
+				},
+				Config: configurationWrittenFor090,
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Config:                   configurationWrittenFor090,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+		},
+	})
 }

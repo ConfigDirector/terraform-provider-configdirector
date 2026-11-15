@@ -34,7 +34,7 @@ func TestAccMetricResource_createsAMetricWithAFilterAndAValueField(t *testing.T)
   kinds       = ["conversion", "value-per-context"]
 `),
 				Check: checkSavedMetric("configdirector_metric.test", client.Metric{
-					EventName: "checkout_completed",
+					EventName: stringPointer("checkout_completed"),
 					Filter: []client.MetricFilterCondition{
 						{Field: "/plan", TargetType: "text", Operator: "is one of", TargetValues: []string{"team", "enterprise"}},
 						{Field: "/items", TargetType: "number", Operator: ">=", TargetValues: []string{"2"}},
@@ -79,7 +79,7 @@ resource "configdirector_metric" "gift" {
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkSavedMetric("configdirector_metric.team", client.Metric{
-						EventName: "checkout_completed",
+						EventName: stringPointer("checkout_completed"),
 						Filter: []client.MetricFilterCondition{
 							{Field: "/plan", TargetType: "text", Operator: "is one of", TargetValues: []string{"team"}},
 						},
@@ -87,7 +87,7 @@ resource "configdirector_metric" "gift" {
 						Kinds:     []string{"conversion"},
 					}),
 					checkSavedMetric("configdirector_metric.gift", client.Metric{
-						EventName: "checkout_completed",
+						EventName: stringPointer("checkout_completed"),
 						Filter: []client.MetricFilterCondition{
 							{Field: "/gift", TargetType: "boolean", Operator: "equals", TargetValues: []string{"true"}},
 						},
@@ -143,7 +143,7 @@ func TestAccMetricResource_filterChangeReplacesTheMetric(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkSavedMetric("configdirector_metric.test", client.Metric{
-						EventName: "checkout_completed",
+						EventName: stringPointer("checkout_completed"),
 						Filter: []client.MetricFilterCondition{
 							{Field: "/plan", TargetType: "text", Operator: "is one of", TargetValues: []string{"team", "enterprise"}},
 						},
@@ -204,7 +204,7 @@ func TestAccMetricResource_valueFieldChangeReplacesTheMetric(t *testing.T) {
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					checkSavedMetric("configdirector_metric.test", client.Metric{
-						EventName:  "checkout_completed",
+						EventName:  stringPointer("checkout_completed"),
 						ValueField: stringPointer("/order/total"),
 						Direction:  "higher-is-better",
 						Kinds:      []string{"value-per-context"},
@@ -688,7 +688,7 @@ resource "configdirector_metric" "test" {
 }
 `,
 				Check: checkSavedMetric("configdirector_metric.test", client.Metric{
-					EventName: "checkout_completed",
+					EventName: stringPointer("checkout_completed"),
 					Direction: "higher-is-better",
 					Kinds:     []string{"conversion"},
 				}),

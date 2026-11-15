@@ -3,12 +3,12 @@
 page_title: "configdirector_metric Resource - terraform-provider-configdirector"
 subcategory: ""
 description: |-
-  A metric: what an experiment measures, defined in a project for one tracked event name, and attached to any of the project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id attribute. A metric can count only the events whose details match a filter, and sum a detail field in place of the event's value, so a project can have several metrics on one event name, each with its own filter or value field. A metric with a filter or a value field counts the events reported from the moment it is attached to an experiment, never earlier ones. Destroying a metric detaches it from its experiments, and fails while an experiment it is attached to has an open run. Import with project_id_or_slug/metric_id, or with project_id_or_slug/event_name while the event name has one metric: only the first slash separates the project from the rest, which is read as a metric id when it is a UUID and otherwise as an event name, taken literally. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.
+  A metric: what an experiment measures, defined in a project, and attached to any of the project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id attribute. A metric is one tracked event name, given by event_name, or a ratio, a funnel or a retention, each given by the attribute of that name in place of event_name. A metric can count only the events whose details match a filter, and sum a detail field in place of the event's value, so a project can have several metrics on one event name, each with its own filter or value field. A metric with a filter or a value field, and every ratio, funnel and retention metric, counts the events reported from the moment it is attached to an experiment, never earlier ones. Destroying a metric detaches it from its experiments, and fails while an experiment it is attached to has an open run. Import with project_id_or_slug/metric_id, or with project_id_or_slug/event_name while the event name has one metric: only the first slash separates the project from the rest, which is read as a metric id when it is a UUID and otherwise as an event name, taken literally. A ratio, funnel or retention metric is imported by its id. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.
 ---
 
 # configdirector_metric (Resource)
 
-A metric: what an experiment measures, defined in a project for one tracked event name, and attached to any of the project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id attribute. A metric can count only the events whose details match a filter, and sum a detail field in place of the event's value, so a project can have several metrics on one event name, each with its own filter or value field. A metric with a filter or a value field counts the events reported from the moment it is attached to an experiment, never earlier ones. Destroying a metric detaches it from its experiments, and fails while an experiment it is attached to has an open run. Import with project_id_or_slug/metric_id, or with project_id_or_slug/event_name while the event name has one metric: only the first slash separates the project from the rest, which is read as a metric id when it is a UUID and otherwise as an event name, taken literally. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.
+A metric: what an experiment measures, defined in a project, and attached to any of the project's experiments through the metrics of configdirector_config, whose metric_id is this resource's id attribute. A metric is one tracked event name, given by event_name, or a ratio, a funnel or a retention, each given by the attribute of that name in place of event_name. A metric can count only the events whose details match a filter, and sum a detail field in place of the event's value, so a project can have several metrics on one event name, each with its own filter or value field. A metric with a filter or a value field, and every ratio, funnel and retention metric, counts the events reported from the moment it is attached to an experiment, never earlier ones. Destroying a metric detaches it from its experiments, and fails while an experiment it is attached to has an open run. Import with project_id_or_slug/metric_id, or with project_id_or_slug/event_name while the event name has one metric: only the first slash separates the project from the rest, which is read as a metric id when it is a UUID and otherwise as an event name, taken literally. A ratio, funnel or retention metric is imported by its id. The API token needs metrics:read, metrics:create, metrics:update and metrics:delete.
 
 ## Example Usage
 
@@ -17,7 +17,7 @@ terraform {
   required_providers {
     configdirector = {
       source  = "ConfigDirector/configdirector"
-      version = "~> 0.9"
+      version = "~> 0.10"
     }
   }
 }
@@ -65,6 +65,45 @@ resource "configdirector_metric" "checkout_failed" {
   kinds      = ["count-per-context"]
 }
 
+# A ratio divides one total by another: here, the revenue of the checkouts
+# divided by how many there were, which is revenue per order. A ratio, a
+# funnel or a retention takes the place of event_name and reports its own kind,
+# so it leaves kinds out.
+resource "configdirector_metric" "revenue_per_order" {
+  project_id = configdirector_project.example.id
+  ratio = {
+    numerator   = { event_name = "checkout_completed", adds = "value" }
+    denominator = { event_name = "checkout_completed", adds = "events" }
+  }
+  direction = "higher-is-better"
+}
+
+# A funnel is the share of exposed contexts that reached its last step, in
+# order. Reordering its steps replaces the metric.
+resource "configdirector_metric" "cart_to_purchase" {
+  project_id = configdirector_project.example.id
+  funnel = {
+    steps = [
+      { event_name = "cart_viewed" },
+      { event_name = "checkout_started" },
+      { event_name = "checkout_completed" },
+    ]
+  }
+  direction = "higher-is-better"
+}
+
+# A retention is the share of contexts that came back between a first and a
+# last day after their exposure: here, the second week.
+resource "configdirector_metric" "second_week_return" {
+  project_id = configdirector_project.example.id
+  retention = {
+    event_name = "app_opened"
+    first_day  = 7
+    last_day   = 13
+  }
+  direction = "higher-is-better"
+}
+
 # An experiment attaches metrics by id. One primary metric and kind decide the
 # experiment; a secondary metric adds evidence, and a guardrail must not get
 # worse.
@@ -83,7 +122,10 @@ resource "configdirector_config" "checkout_button_copy" {
   metrics = [
     { metric_id = configdirector_metric.checkout_completed.id, role = "primary", primary_kind = "conversion" },
     { metric_id = configdirector_metric.team_checkout_items.id, role = "secondary" },
+    { metric_id = configdirector_metric.revenue_per_order.id, role = "secondary" },
+    { metric_id = configdirector_metric.cart_to_purchase.id, role = "secondary" },
     { metric_id = configdirector_metric.checkout_failed.id, role = "guardrail" },
+    { metric_id = configdirector_metric.second_week_return.id, role = "guardrail" },
   ]
 
   initial_value = "Buy now"
@@ -96,15 +138,18 @@ resource "configdirector_config" "checkout_button_copy" {
 ### Required
 
 - `direction` (String) Whether a higher or a lower number is better: "higher-is-better" or "lower-is-better".
-- `event_name` (String) The name of the tracked event the metric measures, exactly as the application reports it, letter case included. A metric keeps its event name, so changing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run.
-- `kinds` (Set of String) What the metric reports, at least one of: "conversion" (the share of exposed contexts that reported the event at least once), "count-per-context" (the events each exposed context reported, averaged) and "value-per-context" (the sum of the event's value, or of its value_field, per exposed context, averaged). The primary metric of an experiment decides on one of these kinds.
 - `project_id` (String) ID of the project this metric belongs to. Changing the project replaces the metric.
 
 ### Optional
 
 - `description` (String) What the metric measures, up to 1,000 characters. Leaving it out removes the description.
-- `filter` (Attributes Set) The conditions an event's details must all match for the event to count, unordered: 1 to 5. Leave filter out to count every event with the event name. A metric keeps its filter, so changing, adding or removing a condition replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first. (see [below for nested schema](#nestedatt--filter))
-- `value_field` (String) The detail field whose number the metric sums in place of the event's value, as a JSON pointer into the event's details (RFC 6901), such as /items, up to 500 characters. An event whose field is missing or not a number counts as an event and adds nothing to the sum. A metric with a value field reports "value-per-context", so kinds must include it. A metric keeps its value field, so changing, adding or removing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first.
+- `event_name` (String) The name of the tracked event the metric measures, exactly as the application reports it, letter case included. Required unless the metric is a ratio, a funnel or a retention, which leave it out. A metric keeps its event name, so changing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run.
+- `filter` (Attributes Set) The conditions an event's details must all match for the event to count, unordered: 1 to 5. Leave filter out to count every event with the event name. Only a metric with an event_name takes one: a ratio, a funnel or a retention has a filter wherever it names an event. A metric keeps its filter, so changing, adding or removing a condition replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first. (see [below for nested schema](#nestedatt--filter))
+- `funnel` (Attributes) Makes the metric a funnel: the share of exposed contexts that reached the last of its steps, in order, with how many contexts reached each step. A funnel metric has no event_name, filter, value_field or kinds of its own, and reports the "funnel" kind. A metric keeps its steps and their order, so changing or reordering them replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first. (see [below for nested schema](#nestedatt--funnel))
+- `kinds` (Set of String) What a metric with an event_name reports, at least one of: "conversion" (the share of exposed contexts that reported the event at least once), "count-per-context" (the events each exposed context reported, averaged) and "value-per-context" (the sum of the event's value, or of its value_field, per exposed context, averaged). The primary metric of an experiment decides on one of these kinds. Required with an event_name. A ratio, a funnel or a retention leaves kinds out and reports its own kind alone, which kinds then shows: "ratio", "funnel" or "retention".
+- `ratio` (Attributes) Makes the metric a ratio: one total divided by another, such as revenue per order. Each total adds up the events or the value of one event name over a variation's exposed contexts, and the two totals are divided once. A ratio metric has no event_name, filter, value_field or kinds of its own, and reports the "ratio" kind. A metric keeps its ratio, so changing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first. (see [below for nested schema](#nestedatt--ratio))
+- `retention` (Attributes) Makes the metric a retention: the share of contexts that reported an event between a first and a last day after their exposure, such as days 7 to 13, of the contexts whose last day has passed. A day is 24 hours counted from the context's own first exposure: day 1 starts 24 hours after it. A retention metric has no event_name, filter, value_field or kinds of its own, and reports the "retention" kind. A metric keeps its retention, so changing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first. (see [below for nested schema](#nestedatt--retention))
+- `value_field` (String) The detail field whose number the metric sums in place of the event's value, as a JSON pointer into the event's details (RFC 6901), such as /items, up to 500 characters. An event whose field is missing or not a number counts as an event and adds nothing to the sum. Only a metric with an event_name takes one, and it reports "value-per-context", so kinds must include it. A metric keeps its value field, so changing, adding or removing it replaces the metric, which detaches the old one from its experiments and fails while one of them has an open run: stop the run first.
 
 ### Read-Only
 
@@ -112,6 +157,120 @@ resource "configdirector_config" "checkout_button_copy" {
 
 <a id="nestedatt--filter"></a>
 ### Nested Schema for `filter`
+
+Required:
+
+- `field` (String) The detail field the condition reads, as a JSON pointer into the event's details (RFC 6901), such as /plan or /address/country, up to 500 characters. An event without the field matches only the "is NOT one of" and "!=" operators.
+- `operator` (String) For text, "is one of" or "is NOT one of"; for number, "=", "!=", ">", ">=", "<" or "<="; for boolean, "equals".
+- `target_type` (String) How the condition compares the field: "text", "number" or "boolean".
+- `target_values` (Set of String) What the field is compared with: for text, 1 to 20 values of up to 500 characters each; for number, one number, such as "2" or "9.99"; for boolean, "true" or "false".
+
+
+<a id="nestedatt--funnel"></a>
+### Nested Schema for `funnel`
+
+Required:
+
+- `steps` (Attributes List) The 2 to 5 steps, in the order a context reaches them. A context reaches the first step with an event that matches it, and each later step with an event that matches it and happened at or after the moment it reached the step before, with no time limit but the run's end. Two steps can name the same event when their filters differ. (see [below for nested schema](#nestedatt--funnel--steps))
+
+<a id="nestedatt--funnel--steps"></a>
+### Nested Schema for `funnel.steps`
+
+Required:
+
+- `event_name` (String) The name of the tracked event that reaches the step, exactly as the application reports it, letter case included.
+
+Optional:
+
+- `filter` (Attributes Set) The conditions an event's details must all match to reach the step, unordered: 1 to 5, each written as a condition of the metric's filter. Leave filter out for every event with the event name to reach it. (see [below for nested schema](#nestedatt--funnel--steps--filter))
+
+<a id="nestedatt--funnel--steps--filter"></a>
+### Nested Schema for `funnel.steps.filter`
+
+Required:
+
+- `field` (String) The detail field the condition reads, as a JSON pointer into the event's details (RFC 6901), such as /plan or /address/country, up to 500 characters. An event without the field matches only the "is NOT one of" and "!=" operators.
+- `operator` (String) For text, "is one of" or "is NOT one of"; for number, "=", "!=", ">", ">=", "<" or "<="; for boolean, "equals".
+- `target_type` (String) How the condition compares the field: "text", "number" or "boolean".
+- `target_values` (Set of String) What the field is compared with: for text, 1 to 20 values of up to 500 characters each; for number, one number, such as "2" or "9.99"; for boolean, "true" or "false".
+
+
+
+
+<a id="nestedatt--ratio"></a>
+### Nested Schema for `ratio`
+
+Required:
+
+- `denominator` (Attributes) The total the numerator is divided by. (see [below for nested schema](#nestedatt--ratio--denominator))
+- `numerator` (Attributes) The total divided by the denominator. (see [below for nested schema](#nestedatt--ratio--numerator))
+
+<a id="nestedatt--ratio--denominator"></a>
+### Nested Schema for `ratio.denominator`
+
+Required:
+
+- `adds` (String) What each event adds to the denominator: "events", where each event adds 1, or "value", where each event adds its value, or the number in its value_field.
+- `event_name` (String) The name of the tracked event the denominator adds up, exactly as the application reports it, letter case included.
+
+Optional:
+
+- `filter` (Attributes Set) The conditions an event's details must all match to count for the denominator, unordered: 1 to 5, each written as a condition of the metric's filter. Leave filter out to count every event with the event name. (see [below for nested schema](#nestedatt--ratio--denominator--filter))
+- `value_field` (String) The detail field whose number each event adds to the denominator in place of its value, as a JSON pointer into the event's details (RFC 6901), such as /order/total, up to 500 characters. Only a side whose adds is "value" takes one. An event whose field is missing or not a number adds nothing.
+
+<a id="nestedatt--ratio--denominator--filter"></a>
+### Nested Schema for `ratio.denominator.filter`
+
+Required:
+
+- `field` (String) The detail field the condition reads, as a JSON pointer into the event's details (RFC 6901), such as /plan or /address/country, up to 500 characters. An event without the field matches only the "is NOT one of" and "!=" operators.
+- `operator` (String) For text, "is one of" or "is NOT one of"; for number, "=", "!=", ">", ">=", "<" or "<="; for boolean, "equals".
+- `target_type` (String) How the condition compares the field: "text", "number" or "boolean".
+- `target_values` (Set of String) What the field is compared with: for text, 1 to 20 values of up to 500 characters each; for number, one number, such as "2" or "9.99"; for boolean, "true" or "false".
+
+
+
+<a id="nestedatt--ratio--numerator"></a>
+### Nested Schema for `ratio.numerator`
+
+Required:
+
+- `adds` (String) What each event adds to the numerator: "events", where each event adds 1, or "value", where each event adds its value, or the number in its value_field.
+- `event_name` (String) The name of the tracked event the numerator adds up, exactly as the application reports it, letter case included.
+
+Optional:
+
+- `filter` (Attributes Set) The conditions an event's details must all match to count for the numerator, unordered: 1 to 5, each written as a condition of the metric's filter. Leave filter out to count every event with the event name. (see [below for nested schema](#nestedatt--ratio--numerator--filter))
+- `value_field` (String) The detail field whose number each event adds to the numerator in place of its value, as a JSON pointer into the event's details (RFC 6901), such as /order/total, up to 500 characters. Only a side whose adds is "value" takes one. An event whose field is missing or not a number adds nothing.
+
+<a id="nestedatt--ratio--numerator--filter"></a>
+### Nested Schema for `ratio.numerator.filter`
+
+Required:
+
+- `field` (String) The detail field the condition reads, as a JSON pointer into the event's details (RFC 6901), such as /plan or /address/country, up to 500 characters. An event without the field matches only the "is NOT one of" and "!=" operators.
+- `operator` (String) For text, "is one of" or "is NOT one of"; for number, "=", "!=", ">", ">=", "<" or "<="; for boolean, "equals".
+- `target_type` (String) How the condition compares the field: "text", "number" or "boolean".
+- `target_values` (Set of String) What the field is compared with: for text, 1 to 20 values of up to 500 characters each; for number, one number, such as "2" or "9.99"; for boolean, "true" or "false".
+
+
+
+
+<a id="nestedatt--retention"></a>
+### Nested Schema for `retention`
+
+Required:
+
+- `event_name` (String) The name of the tracked event that brings a context back, exactly as the application reports it, letter case included.
+- `first_day` (Number) The first day after a context's exposure on which the event counts, a whole number from 1 to 90.
+- `last_day` (Number) The last day after a context's exposure on which the event counts, a whole number from 1 to 90 and no earlier than first_day; the same number as first_day is one day. A context is measured once its last day has ended.
+
+Optional:
+
+- `filter` (Attributes Set) The conditions an event's details must all match to bring a context back, unordered: 1 to 5, each written as a condition of the metric's filter. Leave filter out for every event with the event name to count. (see [below for nested schema](#nestedatt--retention--filter))
+
+<a id="nestedatt--retention--filter"></a>
+### Nested Schema for `retention.filter`
 
 Required:
 
@@ -143,12 +302,14 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 ```shell
 # <project_id_or_slug>/<metric_id> - the project half accepts either its UUID
 # or its slug. The metric's id ends the address of its page in the dashboard.
+# A ratio, funnel or retention metric is imported this way.
 terraform import configdirector_metric.team_checkout_items metric-example/0b9d6c1e-58a4-4c39-9a7e-3f1c2d5e8b01
 
 # <project_id_or_slug>/<event_name> - while the event name has one metric. Only
 # the first slash separates the project from the event name, which is taken
 # literally, letter case included. When several metrics share the event name,
-# the import fails and lists their ids.
+# the import fails and lists their ids. A ratio, funnel or retention metric is
+# never found by an event name, even one it counts.
 terraform import configdirector_metric.checkout_failed metric-example/checkout_failed
 
 tofu import configdirector_metric.checkout_failed metric-example/checkout_failed

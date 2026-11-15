@@ -577,3 +577,49 @@ func TestAccConfigMetrics_hypothesisOnAConfigFailsThePlan(t *testing.T) {
 		},
 	})
 }
+
+func TestAccConfigMetrics_experimentDecidesOnAFunnelMetric(t *testing.T) {
+	p := newTestAccProject(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: p.config("test") + `
+resource "configdirector_metric" "checkout_funnel" {
+  project_id = configdirector_project.test.id
+  funnel = {
+    steps = [
+      { event_name = "cart_viewed" },
+      { event_name = "checkout_completed" },
+    ]
+  }
+  direction = "higher-is-better"
+}
+
+resource "configdirector_config" "test" {
+  project_id = configdirector_project.test.id
+  key        = "checkout-cta-copy"
+  role       = "experiment"
+  type       = "string"
+  variations = [
+    { name = "Control", value = "Buy now" },
+    { name = "Urgent", value = "Buy now, few left" },
+  ]
+  initial_value = "Buy now"
+  metrics = [
+    { metric_id = configdirector_metric.checkout_funnel.id, role = "primary", primary_kind = "funnel" },
+  ]
+}
+`,
+				Check: checkSavedConfigMetrics(
+					expectedConfigMetric{metricAddress: "configdirector_metric.checkout_funnel", role: "primary", primaryKind: stringPointer("funnel")},
+				),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+		},
+	})
+}

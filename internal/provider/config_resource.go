@@ -116,7 +116,8 @@ func (r *ConfigResource) Schema(ctx context.Context, req resource.SchemaRequest,
 							Optional: true,
 							Computed: true,
 							Description: "The kind the primary metric decides on, one of the kinds its metric reports: \"conversion\", " +
-								"\"count-per-context\" or \"value-per-context\". Only the primary metric has one.",
+								"\"count-per-context\" or \"value-per-context\" for a metric with an event_name, and \"ratio\", " +
+								"\"funnel\" or \"retention\" for a metric of that kind. Only the primary metric has one.",
 							Validators: []validator.String{stringvalidator.OneOf(metricKinds...)},
 						},
 					},

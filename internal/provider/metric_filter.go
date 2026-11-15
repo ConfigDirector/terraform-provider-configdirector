@@ -2,17 +2,23 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
@@ -52,9 +58,22 @@ func isDecimalNumber(text string) bool {
 }
 
 type metricFilterTargetType struct {
-	operators          []string
-	refuseTargetValues func(targetValues []string) (refusal string, refused bool)
-	comparisonWords    func(condition client.MetricFilterCondition) string
+	operators             []string
+	refuseTargetValues    func(targetValues []string) (refusal string, refused bool)
+	comparisonWords       func(condition client.MetricFilterCondition) string
+	targetValueAsCompared func(targetValue string) string
+}
+
+func targetValueAsWritten(targetValue string) string {
+	return targetValue
+}
+
+func numberAsCompared(targetValue string) string {
+	if !isDecimalNumber(targetValue) {
+		return targetValue
+	}
+	number, _ := strconv.ParseFloat(targetValue, 64)
+	return javaScriptNumberText(number)
 }
 
 func comparisonWithTargetValueList(condition client.MetricFilterCondition) string {
@@ -81,7 +100,8 @@ var metricFilterTargetTypes = map[string]metricFilterTargetType{
 				return "", false
 			}
 		},
-		comparisonWords: comparisonWithTargetValueList,
+		comparisonWords:       comparisonWithTargetValueList,
+		targetValueAsCompared: targetValueAsWritten,
 	},
 	"number": {
 		operators: []string{"=", "!=", ">", ">=", "<", "<="},
@@ -98,6 +118,7 @@ var metricFilterTargetTypes = map[string]metricFilterTargetType{
 		comparisonWords: func(condition client.MetricFilterCondition) string {
 			return condition.Operator + " " + firstTargetValue(condition)
 		},
+		targetValueAsCompared: numberAsCompared,
 	},
 	"boolean": {
 		operators: []string{"equals"},
@@ -114,6 +135,7 @@ var metricFilterTargetTypes = map[string]metricFilterTargetType{
 		comparisonWords: func(condition client.MetricFilterCondition) string {
 			return "is " + firstTargetValue(condition)
 		},
+		targetValueAsCompared: targetValueAsWritten,
 	},
 }
 
@@ -255,7 +277,79 @@ func (v metricFilterConditionFitsItsTargetType) ValidateObject(ctx context.Conte
 	}
 }
 
-func metricFilterForCreate(ctx context.Context, filter types.Set) ([]client.MetricFilterCondition, diag.Diagnostics) {
+func metricFilterAttribute(description string, planModifiers ...planmodifier.Set) schema.SetNestedAttribute {
+	return schema.SetNestedAttribute{
+		Optional:      true,
+		Description:   description,
+		PlanModifiers: planModifiers,
+		Validators:    []validator.Set{metricFilterHasConditions{}, setvalidator.SizeAtMost(metricFilterConditionsLimit)},
+		NestedObject: schema.NestedAttributeObject{
+			Validators: []validator.Object{metricFilterConditionFitsItsTargetType{}},
+			Attributes: map[string]schema.Attribute{
+				"field": schema.StringAttribute{
+					Required: true,
+					Description: "The detail field the condition reads, as a JSON pointer into the event's details " +
+						"(RFC 6901), such as /plan or /address/country, up to 500 characters. An event without the " +
+						"field matches only the \"is NOT one of\" and \"!=\" operators.",
+					Validators: detailFieldValidators(),
+				},
+				"target_type": schema.StringAttribute{
+					Required:    true,
+					Description: "How the condition compares the field: \"text\", \"number\" or \"boolean\".",
+					Validators:  []validator.String{stringvalidator.OneOf(slices.Sorted(maps.Keys(metricFilterTargetTypes))...)},
+				},
+				"operator": schema.StringAttribute{
+					Required: true,
+					Description: "For text, \"is one of\" or \"is NOT one of\"; for number, \"=\", \"!=\", " +
+						"\">\", \">=\", \"<\" or \"<=\"; for boolean, \"equals\".",
+				},
+				"target_values": schema.SetAttribute{
+					Required:    true,
+					ElementType: types.StringType,
+					Description: "What the field is compared with: for text, 1 to 20 values of up to 500 characters " +
+						"each; for number, one number, such as \"2\" or \"9.99\"; for boolean, \"true\" or \"false\".",
+					Validators: []validator.Set{
+						setvalidator.ValueStringsAre(
+							targetValueIsNotBlank{},
+							stringvalidator.UTF8LengthAtMost(targetValueMaximumCharacters),
+						),
+					},
+				},
+			},
+		},
+	}
+}
+
+func detailFieldValidators() []validator.String {
+	return []validator.String{
+		stringvalidator.UTF8LengthAtMost(detailFieldMaximumCharacters),
+		detailFieldIsAJSONPointer{},
+	}
+}
+
+func targetValuesAsCompared(condition client.MetricFilterCondition) []string {
+	targetValueAsCompared := targetValueAsWritten
+	if targetType, isTargetType := metricFilterTargetTypes[condition.TargetType]; isTargetType {
+		targetValueAsCompared = targetType.targetValueAsCompared
+	}
+	compared := make([]string, len(condition.TargetValues))
+	for i, targetValue := range condition.TargetValues {
+		compared[i] = targetValueAsCompared(targetValue)
+	}
+	return slices.Compact(slices.Sorted(slices.Values(compared)))
+}
+
+func metricFilterAsCompared(filter []client.MetricFilterCondition) string {
+	conditions := make([]string, len(filter))
+	for i, condition := range filter {
+		conditionAsCompared, _ := json.Marshal([]any{condition.Field, condition.TargetType, condition.Operator, targetValuesAsCompared(condition)})
+		conditions[i] = string(conditionAsCompared)
+	}
+	filterAsCompared, _ := json.Marshal(slices.Compact(slices.Sorted(slices.Values(conditions))))
+	return string(filterAsCompared)
+}
+
+func metricFilterConditionsIn(ctx context.Context, filter types.Set) ([]client.MetricFilterCondition, diag.Diagnostics) {
 	if filter.IsNull() {
 		return nil, nil
 	}

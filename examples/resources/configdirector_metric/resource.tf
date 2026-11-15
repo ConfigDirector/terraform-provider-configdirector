@@ -2,7 +2,7 @@ terraform {
   required_providers {
     configdirector = {
       source  = "ConfigDirector/configdirector"
-      version = "~> 0.9"
+      version = "~> 0.10"
     }
   }
 }
@@ -50,6 +50,45 @@ resource "configdirector_metric" "checkout_failed" {
   kinds      = ["count-per-context"]
 }
 
+# A ratio divides one total by another: here, the revenue of the checkouts
+# divided by how many there were, which is revenue per order. A ratio, a
+# funnel or a retention takes the place of event_name and reports its own kind,
+# so it leaves kinds out.
+resource "configdirector_metric" "revenue_per_order" {
+  project_id = configdirector_project.example.id
+  ratio = {
+    numerator   = { event_name = "checkout_completed", adds = "value" }
+    denominator = { event_name = "checkout_completed", adds = "events" }
+  }
+  direction = "higher-is-better"
+}
+
+# A funnel is the share of exposed contexts that reached its last step, in
+# order. Reordering its steps replaces the metric.
+resource "configdirector_metric" "cart_to_purchase" {
+  project_id = configdirector_project.example.id
+  funnel = {
+    steps = [
+      { event_name = "cart_viewed" },
+      { event_name = "checkout_started" },
+      { event_name = "checkout_completed" },
+    ]
+  }
+  direction = "higher-is-better"
+}
+
+# A retention is the share of contexts that came back between a first and a
+# last day after their exposure: here, the second week.
+resource "configdirector_metric" "second_week_return" {
+  project_id = configdirector_project.example.id
+  retention = {
+    event_name = "app_opened"
+    first_day  = 7
+    last_day   = 13
+  }
+  direction = "higher-is-better"
+}
+
 # An experiment attaches metrics by id. One primary metric and kind decide the
 # experiment; a secondary metric adds evidence, and a guardrail must not get
 # worse.
@@ -68,7 +107,10 @@ resource "configdirector_config" "checkout_button_copy" {
   metrics = [
     { metric_id = configdirector_metric.checkout_completed.id, role = "primary", primary_kind = "conversion" },
     { metric_id = configdirector_metric.team_checkout_items.id, role = "secondary" },
+    { metric_id = configdirector_metric.revenue_per_order.id, role = "secondary" },
+    { metric_id = configdirector_metric.cart_to_purchase.id, role = "secondary" },
     { metric_id = configdirector_metric.checkout_failed.id, role = "guardrail" },
+    { metric_id = configdirector_metric.second_week_return.id, role = "guardrail" },
   ]
 
   initial_value = "Buy now"

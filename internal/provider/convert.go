@@ -405,8 +405,11 @@ func declaredOrSavedVariationValue(declared attr.Value, saved any) any {
 }
 
 func javaScriptNumberText(number float64) string {
+	if number == 0 {
+		return "0"
+	}
 	magnitude := math.Abs(number)
-	usesDecimalNotation := magnitude == 0 || (magnitude >= 1e-6 && magnitude < 1e21)
+	usesDecimalNotation := magnitude >= 1e-6 && magnitude < 1e21
 	if usesDecimalNotation {
 		return strconv.FormatFloat(number, 'f', -1, 64)
 	}

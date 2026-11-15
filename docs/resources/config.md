@@ -175,7 +175,7 @@ resource "configdirector_config" "pricing_experiment" {
 Optional:
 
 - `metric_id` (String) Required in each metric: the id of a configdirector_metric in the config's project.
-- `primary_kind` (String) The kind the primary metric decides on, one of the kinds its metric reports: "conversion", "count-per-context" or "value-per-context". Only the primary metric has one.
+- `primary_kind` (String) The kind the primary metric decides on, one of the kinds its metric reports: "conversion", "count-per-context" or "value-per-context" for a metric with an event_name, and "ratio", "funnel" or "retention" for a metric of that kind. Only the primary metric has one.
 - `role` (String) Required in each metric: "primary" for the metric and kind that decide the experiment, "secondary" for supporting evidence, or "guardrail" for a metric that must not get worse.
 
 

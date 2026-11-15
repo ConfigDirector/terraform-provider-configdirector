@@ -27,12 +27,43 @@ type MetricFilterCondition struct {
 	TargetValues []string `json:"targetValues"`
 }
 
+type MetricRatioSide struct {
+	EventName  string                  `json:"eventName"`
+	Adds       string                  `json:"adds"`
+	Filter     []MetricFilterCondition `json:"filter"`
+	ValueField *string                 `json:"valueField"`
+}
+
+type MetricRatio struct {
+	Numerator   MetricRatioSide `json:"numerator"`
+	Denominator MetricRatioSide `json:"denominator"`
+}
+
+type MetricFunnelStep struct {
+	EventName string                  `json:"eventName"`
+	Filter    []MetricFilterCondition `json:"filter"`
+}
+
+type MetricFunnel struct {
+	Steps []MetricFunnelStep `json:"steps"`
+}
+
+type MetricRetention struct {
+	EventName string                  `json:"eventName"`
+	Filter    []MetricFilterCondition `json:"filter"`
+	FirstDay  int64                   `json:"firstDay"`
+	LastDay   int64                   `json:"lastDay"`
+}
+
 type Metric struct {
 	ID          string                  `json:"id"`
 	ProjectID   string                  `json:"projectId"`
-	EventName   string                  `json:"eventName"`
+	EventName   *string                 `json:"eventName"`
 	Filter      []MetricFilterCondition `json:"filter"`
 	ValueField  *string                 `json:"valueField"`
+	Ratio       *MetricRatio            `json:"ratio"`
+	Funnel      *MetricFunnel           `json:"funnel"`
+	Retention   *MetricRetention        `json:"retention"`
 	Description *string                 `json:"description"`
 	Direction   string                  `json:"direction"`
 	Kinds       []string                `json:"kinds"`
@@ -42,9 +73,12 @@ type Metric struct {
 }
 
 type CreateMetricRequest struct {
-	EventName   string                  `json:"eventName"`
+	EventName   *string                 `json:"eventName"`
 	Filter      []MetricFilterCondition `json:"filter"`
 	ValueField  *string                 `json:"valueField"`
+	Ratio       *MetricRatio            `json:"ratio"`
+	Funnel      *MetricFunnel           `json:"funnel"`
+	Retention   *MetricRetention        `json:"retention"`
 	Description *string                 `json:"description"`
 	Direction   string                  `json:"direction"`
 	Kinds       []string                `json:"kinds"`

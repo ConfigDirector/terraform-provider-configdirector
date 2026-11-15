@@ -59,7 +59,7 @@ func (selection metricSelectedByEventName) findMetric(ctx context.Context, api *
 	case 0:
 		diagnostics.AddError(
 			"Metric Not Found",
-			fmt.Sprintf("Project %q has no metric for the event name %q. The event name is matched exactly, letter case included.", projectIDOrSlug, selection.eventName),
+			fmt.Sprintf("Project %q has no metric for the event name %q. The event name is matched exactly, letter case included. A ratio, funnel or retention metric is imported by its id.", projectIDOrSlug, selection.eventName),
 		)
 		return nil, diagnostics
 	case 1:
@@ -90,7 +90,7 @@ func metricConditionWords(condition client.MetricFilterCondition) string {
 }
 
 func metricLabel(metric client.Metric) string {
-	words := []string{metric.EventName}
+	words := []string{savedText(metric.EventName)}
 	if len(metric.Filter) > 0 {
 		conditions := make([]string, len(metric.Filter))
 		for i, condition := range metric.Filter {
