@@ -4,6 +4,8 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-14
+
 ### Added
 
 - `configdirector_metric` manages ratio, funnel and retention metrics. Set one of `ratio`, `funnel` or `retention` in place of `event_name`. A `ratio` divides one total by another, such as revenue per order: its `numerator` and `denominator` each take an `event_name`, `adds` set to `events` or `value`, an optional `filter` and, on a side that adds `value`, an optional `value_field`. A `funnel` gives the share of exposed contexts that reached the last of its 2 to 5 `steps`, each an `event_name` with an optional `filter`, in the order the configuration gives them. A `retention` gives the share of contexts that reported its `event_name`, with an optional `filter`, between a `first_day` and a `last_day` after their exposure, from 1 to 90. These metrics leave `kinds` out, and the plan and state show their one kind, such as `["funnel"]`. Changing a definition replaces the metric, reordering a funnel's steps included, which fails while an experiment it is attached to has an open run: stop the run first. A definition that ConfigDirector would refuse fails the plan, such as two definitions, a definition beside `event_name`, `filter`, `value_field` or `kinds`, a funnel with fewer than 2 or more than 5 steps or a step that repeats an earlier one, a retention day outside 1 to 90 or a last day before the first, or a `value_field` on a side that adds `events`. Import one with `<project_id_or_slug>/<metric_id>`.
