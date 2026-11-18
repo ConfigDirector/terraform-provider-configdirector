@@ -36,8 +36,10 @@ get pulled directly into the generated provider docs.
     with [Mixpanel](resources/configdirector_integration/mixpanel.tf),
     [Datadog](resources/configdirector_integration/datadog.tf),
     [Grafana](resources/configdirector_integration/grafana.tf) and
-    [PostHog](resources/configdirector_integration/posthog.tf) beside it. The
-    configuration asks for each tool's keys when you plan it
+    [PostHog](resources/configdirector_integration/posthog.tf) beside it, and
+    a [Slack](resources/configdirector_integration/slack.tf) integration that
+    posts only critical alerts to `#incidents`. The configuration asks for each
+    tool's keys and the Slack webhook URL when you plan it
 - `data-sources/<data_source_type>/data-source.tf` - one directory per data
   source, each creating whatever resource(s) it needs to look up:
   - [configdirector_project](data-sources/configdirector_project/data-source.tf)

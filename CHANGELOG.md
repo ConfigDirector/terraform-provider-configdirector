@@ -4,6 +4,10 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+### Added
+
+- `configdirector_integration` manages a Slack integration, which posts a message to one Slack channel for each change and alert it selects. Set `kind = "slack"` and `settings.webhook_url` to the incoming webhook URL Slack created for the channel. The URL is sensitive like the analytics keys, so no plan shows it, and ConfigDirector never returns it: Terraform keeps the one from your configuration, changing it saves the new URL on the next apply, replacing it in the dashboard goes unnoticed, and the first apply after an import saves the one in your configuration. `settings.message_prefix` opens each message, such as `@here`, and `settings.post_resolved_alerts` says whether an alert that resolves gets one line in the channel. `event_types`, `alert_kinds` and `minimum_priority` choose what the integration posts. Left out, they take what a new Slack integration starts with: config and targeting rule changes, the application request alerts at High and above, one line when an alert resolves, and no message prefix. Removing one from the configuration returns it to that. A Slack attribute on an analytics kind fails the plan, such as "minimum_priority does not apply to the amplitude kind. Remove it.", and so does an analytics setting on Slack, `endpoint_url` included. An organization can have up to 20 Slack integrations besides its 10 analytics integrations.
+
 ## [0.10.0] - 2026-11-14
 
 ### Added

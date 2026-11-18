@@ -6,26 +6,32 @@ import (
 )
 
 type Integration struct {
-	ID             string             `json:"id"`
-	Name           string             `json:"name"`
-	Kind           string             `json:"kind"`
-	Settings       map[string]*string `json:"settings"`
-	Enabled        bool               `json:"enabled"`
-	ProjectIDs     []string           `json:"projectIds"`
-	EnvironmentIDs []string           `json:"environmentIds"`
-	TagIDs         []string           `json:"tagIds"`
-	CreatedAt      string             `json:"createdAt"`
-	UpdatedAt      string             `json:"updatedAt"`
+	ID              string         `json:"id"`
+	Name            string         `json:"name"`
+	Kind            string         `json:"kind"`
+	Settings        map[string]any `json:"settings"`
+	Enabled         bool           `json:"enabled"`
+	ProjectIDs      []string       `json:"projectIds"`
+	EnvironmentIDs  []string       `json:"environmentIds"`
+	TagIDs          []string       `json:"tagIds"`
+	EventTypes      *[]string      `json:"eventTypes"`
+	AlertKinds      *[]string      `json:"alertKinds"`
+	MinimumPriority *string        `json:"minimumPriority"`
+	CreatedAt       string         `json:"createdAt"`
+	UpdatedAt       string         `json:"updatedAt"`
 }
 
 type IntegrationRequest struct {
-	Name           string            `json:"name"`
-	Kind           string            `json:"kind"`
-	Settings       map[string]string `json:"settings"`
-	Enabled        bool              `json:"enabled"`
-	ProjectIDs     []string          `json:"projectIds"`
-	EnvironmentIDs []string          `json:"environmentIds"`
-	TagIDs         []string          `json:"tagIds"`
+	Name            string         `json:"name"`
+	Kind            string         `json:"kind"`
+	Settings        map[string]any `json:"settings"`
+	Enabled         bool           `json:"enabled"`
+	ProjectIDs      []string       `json:"projectIds"`
+	EnvironmentIDs  []string       `json:"environmentIds"`
+	TagIDs          []string       `json:"tagIds"`
+	EventTypes      *[]string      `json:"eventTypes,omitempty"`
+	AlertKinds      *[]string      `json:"alertKinds,omitempty"`
+	MinimumPriority *string        `json:"minimumPriority,omitempty"`
 }
 
 func (c *Client) ListIntegrations(ctx context.Context) ([]Integration, error) {

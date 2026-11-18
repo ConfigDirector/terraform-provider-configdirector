@@ -3,18 +3,18 @@
 page_title: "configdirector_integration Resource - terraform-provider-configdirector"
 subcategory: ""
 description: |-
-  An integration connects the organization to an analytics tool and marks its charts when an experiment's run starts, its split changes, a variation is shipped or the run is stopped. An organization can have up to 10, several of one kind if it needs them. See https://docs.configdirector.com/integrations/analytics for what each tool needs.
+  An integration connects the organization to an analytics tool or to a Slack channel. An analytics integration marks the tool's charts when an experiment's run starts, its split changes, a variation is shipped or the run is stopped. A Slack integration posts a message to one channel for each change and alert it selects. An organization can have up to 10 analytics integrations and 20 Slack integrations, several of one kind if it needs them. See https://docs.configdirector.com/integrations/analytics for what each analytics tool needs.
   Requires an API token with the integrations:manage permission. Import with the integration's ID.
-  ConfigDirector never returns a key, token or secret once it is saved, so Terraform notices when you change one in the configuration but not when one is changed outside Terraform. If ConfigDirector disables the integration after three days of failed deliveries, the next apply enables it again while enabled is true.
+  ConfigDirector never returns a key, token, secret or Slack webhook URL once it is saved, so Terraform notices when you change one in the configuration but not when one is changed outside Terraform. If ConfigDirector disables the integration, after three days of failed deliveries or as soon as Slack refuses a message, the next apply enables it again while enabled is true.
 ---
 
 # configdirector_integration (Resource)
 
-An integration connects the organization to an analytics tool and marks its charts when an experiment's run starts, its split changes, a variation is shipped or the run is stopped. An organization can have up to 10, several of one kind if it needs them. See https://docs.configdirector.com/integrations/analytics for what each tool needs.
+An integration connects the organization to an analytics tool or to a Slack channel. An analytics integration marks the tool's charts when an experiment's run starts, its split changes, a variation is shipped or the run is stopped. A Slack integration posts a message to one channel for each change and alert it selects. An organization can have up to 10 analytics integrations and 20 Slack integrations, several of one kind if it needs them. See https://docs.configdirector.com/integrations/analytics for what each analytics tool needs.
 
 Requires an API token with the integrations:manage permission. Import with the integration's ID.
 
-ConfigDirector never returns a key, token or secret once it is saved, so Terraform notices when you change one in the configuration but not when one is changed outside Terraform. If ConfigDirector disables the integration after three days of failed deliveries, the next apply enables it again while enabled is true.
+ConfigDirector never returns a key, token, secret or Slack webhook URL once it is saved, so Terraform notices when you change one in the configuration but not when one is changed outside Terraform. If ConfigDirector disables the integration, after three days of failed deliveries or as soon as Slack refuses a message, the next apply enables it again while enabled is true.
 
 ## Example Usage
 
@@ -143,9 +143,39 @@ resource "configdirector_integration" "posthog" {
 }
 ```
 
-## Keys, tokens and secrets
+### Slack
 
-ConfigDirector stores each key, token and secret encrypted and never shows it again. Terraform keeps the value from your configuration in the state, marked sensitive so that no plan shows it. Changing one in the configuration saves all of the integration's credentials on the next apply, and changing any other setting leaves them as they are. Replacing one in the dashboard goes unnoticed by Terraform.
+Acme's `#incidents` channel gets the alerts that reach Critical, opened with `@here` so everyone in the channel is notified, and no changes.
+
+```terraform
+variable "slack_incidents_webhook_url" {
+  type      = string
+  sensitive = true
+}
+
+resource "configdirector_integration" "incidents" {
+  name = "#incidents"
+  kind = "slack"
+  settings = {
+    webhook_url    = var.slack_incidents_webhook_url
+    message_prefix = "@here"
+  }
+  event_types = []
+  alert_kinds = [
+    "default-value-served-too-often",
+    "experiment-guardrail-worse",
+    "integration-disabled",
+    "webhook-disabled",
+  ]
+  minimum_priority = "critical"
+}
+```
+
+Left out, `event_types`, `alert_kinds`, `minimum_priority` and `settings.post_resolved_alerts` take what a new Slack integration starts with: config and targeting rule changes, the application request alerts at High and above, and one line when an alert resolves. Removing one from the configuration returns it to that. Left out, `settings.message_prefix` gives messages without one.
+
+## Keys, tokens, secrets and Slack webhook URLs
+
+ConfigDirector stores each key, token, secret and Slack webhook URL encrypted and never shows it again. Terraform keeps the value from your configuration in the state, marked sensitive so that no plan shows it. Changing one in the configuration saves all of the integration's credentials on the next apply, and changing any other setting leaves them as they are. Replacing one in the dashboard goes unnoticed by Terraform.
 
 Importing an integration reads everything except these values, so the first plan after an import shows them changing and the first apply saves the ones in your configuration.
 
@@ -154,16 +184,19 @@ Importing an integration reads everything except these values, so the first plan
 
 ### Required
 
-- `kind` (String) The tool the integration connects to: amplitude, datadog, grafana, mixpanel, posthog. Changing the kind replaces the integration, which deletes its delivery log.
+- `kind` (String) The tool the integration connects to: amplitude, datadog, grafana, mixpanel, posthog, slack. Changing the kind replaces the integration, which deletes its delivery log.
 - `name` (String) The integration's name, up to 200 characters.
-- `settings` (Attributes) What the kind needs to reach the tool. Each setting below names the kinds that use it. Every kind's settings are required, except endpoint_url, and a setting another kind uses is refused. (see [below for nested schema](#nestedatt--settings))
+- `settings` (Attributes) What the kind needs to reach the tool or the channel. Each setting below names the kinds that use it. Every kind's settings are required, except endpoint_url, message_prefix and post_resolved_alerts, and a setting another kind uses is refused. (see [below for nested schema](#nestedatt--settings))
 
 ### Optional
 
-- `enabled` (Boolean) Whether the integration posts to the tool. Defaults to true. Disabling it abandons the deliveries still waiting for an attempt.
-- `environment_ids` (Set of String) Mark only the runs in these environments. Leave it empty, as it is by default, to mark runs from every environment.
-- `project_ids` (Set of String) Mark only the runs of experiments in these projects. Leave it empty, as it is by default, to mark runs from every project.
-- `tag_ids` (Set of String) Mark only the runs of experiments that have one of these tags. Leave it empty, as it is by default, to mark runs of every experiment.
+- `alert_kinds` (Set of String) Slack: the alert kinds whose alerts the integration posts, such as config-not-found. Defaults to the application request alerts: config-not-found, client-requested-server-only-config, server-requested-client-only-config, config-type-mismatch, default-value-mismatch, default-value-served-too-often. Set it to [] to post only changes.
+- `enabled` (Boolean) Whether the integration posts to the tool or the channel. Defaults to true. Disabling it abandons the deliveries still waiting for an attempt.
+- `environment_ids` (Set of String) Mark only the runs in these environments, or post to Slack only the changes and alerts in these environments, along with those that belong to no environment. Leave it empty, as it is by default, for every environment.
+- `event_types` (Set of String) Slack: the changes the integration posts, as webhook event types such as config.updated or targeting_rules.updated. https://docs.configdirector.com/integrations/webhooks lists them. Defaults to config.created, config.updated, config.archived, config.restored, targeting_rules.updated. Set it to [] to post only alerts.
+- `minimum_priority` (String) Slack: the priority an alert of a selected kind must reach to be posted, one of low, medium, high, critical. An alert raised lower is posted when its priority rises to it. Defaults to high.
+- `project_ids` (Set of String) Mark only the runs of experiments in these projects, or post to Slack only the changes and alerts in these projects, along with alerts that belong to no project. Leave it empty, as it is by default, for every project.
+- `tag_ids` (Set of String) Mark only the runs of experiments that have one of these tags, or post to Slack only the changes and alerts about configs that have one of them, along with those about no config. Leave it empty, as it is by default, for every config.
 
 ### Read-Only
 
@@ -179,9 +212,11 @@ Optional:
 - `api_key` (String, Sensitive) Amplitude and Datadog: the API key.
 - `data_center` (String) Amplitude: the data center your project is in, us or eu.
 - `data_residency` (String) Mixpanel: where your project's data is stored, us, eu or in.
-- `endpoint_url` (String) Any kind: a URL to post to instead of the one ConfigDirector composes from the other settings. It must start with https:// and its host must resolve to a public address.
+- `endpoint_url` (String) Amplitude, Mixpanel, Datadog, Grafana and PostHog: a URL to post to instead of the one ConfigDirector composes from the other settings. It must start with https:// and its host must resolve to a public address.
 - `host` (String) PostHog: us, eu or the https:// URL of a self-hosted instance, whose host must resolve to a public address.
+- `message_prefix` (String) Slack: text that opens each message, up to 200 characters, such as @here or <!subteam^ID> with the ID of a user group, to notify people. Leave it out for messages without one. A resolved alert is posted without it.
 - `personal_api_key` (String, Sensitive) PostHog: the personal API key.
+- `post_resolved_alerts` (Boolean) Slack: whether an alert that resolves gets one line in the channel it was posted to. Defaults to true.
 - `project_id` (String) Mixpanel and PostHog: the numeric ID of the project in that tool, not a ConfigDirector project.
 - `secret_key` (String, Sensitive) Amplitude: the secret key.
 - `service_account_secret` (String, Sensitive) Mixpanel: the service account's secret.
@@ -189,6 +224,7 @@ Optional:
 - `service_account_username` (String, Sensitive) Mixpanel: the service account's username.
 - `site` (String) Datadog: your site, one of datadoghq.com, us3.datadoghq.com, us5.datadoghq.com, datadoghq.eu or ap1.datadoghq.com.
 - `url` (String) Grafana: the base URL of your instance. It must start with https:// and its host must resolve to a public address.
+- `webhook_url` (String, Sensitive) Slack: the incoming webhook URL Slack created for the channel, in the form https://hooks.slack.com/services/…
 
 ## Import
 

@@ -138,11 +138,37 @@ func (protocol resourceProtocol) proposedNewState(t *testing.T, prior, configura
 	proposed := protocol.values(t, configuration)
 	previous := protocol.values(t, prior)
 	for _, attribute := range protocol.schema.Block.Attributes {
-		if previous != nil && attribute.Computed && proposed[attribute.Name].IsNull() {
+		switch {
+		case previous == nil:
+			continue
+		case attribute.Computed && proposed[attribute.Name].IsNull():
 			proposed[attribute.Name] = previous[attribute.Name]
+		case attribute.NestedType != nil && attribute.NestedType.Nesting == tfprotov6.SchemaObjectNestingModeSingle:
+			proposed[attribute.Name] = proposedNestedObject(t, attribute.NestedType, previous[attribute.Name], proposed[attribute.Name])
 		}
 	}
 	return dynamicValueOf(t, tftypes.NewValue(protocol.typeOf, proposed))
+}
+
+func proposedNestedObject(t *testing.T, nested *tfprotov6.SchemaObject, prior, declared tftypes.Value) tftypes.Value {
+	t.Helper()
+
+	if prior.IsNull() || !prior.IsKnown() || declared.IsNull() || !declared.IsKnown() {
+		return declared
+	}
+	var previous, proposed map[string]tftypes.Value
+	if err := prior.As(&previous); err != nil {
+		t.Fatal(err)
+	}
+	if err := declared.As(&proposed); err != nil {
+		t.Fatal(err)
+	}
+	for _, attribute := range nested.Attributes {
+		if attribute.Computed && proposed[attribute.Name].IsNull() {
+			proposed[attribute.Name] = previous[attribute.Name]
+		}
+	}
+	return tftypes.NewValue(declared.Type(), proposed)
 }
 
 func (protocol resourceProtocol) plan(t *testing.T, prior, configuration *tfprotov6.DynamicValue) *tfprotov6.PlanResourceChangeResponse {

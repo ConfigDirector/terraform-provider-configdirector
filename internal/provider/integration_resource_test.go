@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
+	"github.com/hashicorp/terraform-plugin-testing/config"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
@@ -31,13 +34,19 @@ const integrationStubID = "7b3e9f1c-2a4d-4c6e-9f8b-1d2c3b4a5e6f"
 const integrationStubPath = "/v1/integrations/" + integrationStubID
 const testAccIntegrationNamePrefix = "tf-acc-"
 
-var integrationCredentialFields = []string{"apiKey", "secretKey", "serviceAccountUsername", "serviceAccountSecret", "serviceAccountToken", "personalApiKey"}
+var integrationCredentialFields = []string{"apiKey", "secretKey", "serviceAccountUsername", "serviceAccountSecret", "serviceAccountToken", "personalApiKey", "webhookUrl"}
 
 var amplitudeSettings = map[string]string{"data_center": "us", "api_key": "amplitude-api-key", "secret_key": "amplitude-secret-key"}
 var mixpanelSettings = map[string]string{"data_residency": "eu", "project_id": "3212345", "service_account_username": "mixpanel-service-account", "service_account_secret": "mixpanel-service-secret"}
 var datadogSettings = map[string]string{"site": "datadoghq.eu", "api_key": "datadog-api-key"}
 var grafanaSettings = map[string]string{"url": "https://grafana.example.com", "service_account_token": "grafana-service-account-token"}
 var posthogSettings = map[string]string{"host": "eu", "project_id": "42", "personal_api_key": "posthog-personal-api-key"}
+
+const incidentsWebhookURL = "https://hooks.slack.com/services/T0ACME0001/B0INCIDENTS/incidentsWebhookSecret"
+const outagesWebhookURL = "https://hooks.slack.com/services/T0ACME0001/B0OUTAGES/outagesWebhookSecret"
+
+var sortedSlackStartingEventTypes = []string{"config.archived", "config.created", "config.restored", "config.updated", "targeting_rules.updated"}
+var sortedSlackStartingAlertKinds = []string{"client-requested-server-only-config", "config-not-found", "config-type-mismatch", "default-value-mismatch", "default-value-served-too-often", "server-requested-client-only-config"}
 
 type integrationStubRequest struct {
 	method string
@@ -99,10 +108,42 @@ func (api *integrationStubAPI) respondSaving(response http.ResponseWriter, body 
 			return
 		}
 	}
+	api.saved = map[string]any{
+		"id": integrationStubID, "name": strings.TrimSpace(name), "kind": kind,
+		"enabled": body["enabled"], "disabledReason": nil,
+		"projectIds": body["projectIds"], "environmentIds": body["environmentIds"], "tagIds": body["tagIds"],
+		"createdAt": createdAt, "updatedAt": fmt.Sprintf("2026-11-08T10:%02d:00.000Z", api.saves),
+	}
+	if kind == "slack" {
+		api.saved["settings"] = savedSlackSettings(settings)
+		maps.Copy(api.saved, savedSlackSelection(body))
+	} else {
+		api.saved["settings"] = savedAnalyticsSettings(settings)
+	}
+	api.saves++
+	respondWithJSON(response, http.StatusOK, api.saved)
+}
+
+func settingsWithoutCredentials(settings map[string]any) map[string]any {
 	saved := maps.Clone(settings)
 	for _, field := range integrationCredentialFields {
 		delete(saved, field)
 	}
+	return saved
+}
+
+func savedSlackSettings(settings map[string]any) map[string]any {
+	saved := settingsWithoutCredentials(settings)
+	messagePrefix, _ := saved["messagePrefix"].(string)
+	saved["messagePrefix"] = strings.TrimSpace(messagePrefix)
+	if _, sent := saved["postResolvedAlerts"]; !sent {
+		saved["postResolvedAlerts"] = true
+	}
+	return saved
+}
+
+func savedAnalyticsSettings(settings map[string]any) map[string]any {
+	saved := settingsWithoutCredentials(settings)
 	if _, overridden := saved["endpointUrl"]; !overridden {
 		saved["endpointUrl"] = nil
 	}
@@ -111,14 +152,21 @@ func (api *integrationStubAPI) respondSaving(response http.ResponseWriter, body 
 			saved[field] = strings.TrimRight(strings.TrimSpace(text), "/")
 		}
 	}
-	api.saved = map[string]any{
-		"id": integrationStubID, "name": strings.TrimSpace(name), "kind": kind, "settings": saved,
-		"enabled": body["enabled"], "disabledReason": nil,
-		"projectIds": body["projectIds"], "environmentIds": body["environmentIds"], "tagIds": body["tagIds"],
-		"createdAt": createdAt, "updatedAt": fmt.Sprintf("2026-11-08T10:%02d:00.000Z", api.saves),
+	return saved
+}
+
+func savedSlackSelection(body map[string]any) map[string]any {
+	selection := map[string]any{
+		"eventTypes":      []any{"config.created", "config.updated", "config.archived", "config.restored", "targeting_rules.updated"},
+		"alertKinds":      []any{"config-not-found", "client-requested-server-only-config", "server-requested-client-only-config", "config-type-mismatch", "default-value-mismatch", "default-value-served-too-often"},
+		"minimumPriority": "high",
 	}
-	api.saves++
-	respondWithJSON(response, http.StatusOK, api.saved)
+	for field := range selection {
+		if sent, present := body[field]; present {
+			selection[field] = sent
+		}
+	}
+	return selection
 }
 
 func (api *integrationStubAPI) lastRequestBody(t *testing.T, method string) map[string]any {
@@ -210,6 +258,41 @@ func (protocol integrationProtocol) amplitudeConfig(t *testing.T, attributes map
 	return protocol.kindConfig(t, "amplitude", amplitudeSettings, attributes)
 }
 
+func (protocol integrationProtocol) slackConfig(t *testing.T, settings map[string]tftypes.Value, attributes map[string]tftypes.Value) *tfprotov6.DynamicValue {
+	t.Helper()
+
+	declaredSettings := map[string]tftypes.Value{"webhook_url": tftypes.NewValue(tftypes.String, incidentsWebhookURL)}
+	maps.Copy(declaredSettings, settings)
+	configured := map[string]tftypes.Value{
+		"name":     tftypes.NewValue(tftypes.String, "#incidents"),
+		"kind":     tftypes.NewValue(tftypes.String, "slack"),
+		"settings": protocol.settingsValue(declaredSettings),
+	}
+	maps.Copy(configured, attributes)
+	return protocol.config(t, configured)
+}
+
+func incidentsSettings() map[string]tftypes.Value {
+	return map[string]tftypes.Value{
+		"message_prefix":       tftypes.NewValue(tftypes.String, "@here"),
+		"post_resolved_alerts": tftypes.NewValue(tftypes.Bool, false),
+	}
+}
+
+func incidentsSelection() map[string]tftypes.Value {
+	return map[string]tftypes.Value{
+		"event_types":      stringSetOf(),
+		"alert_kinds":      stringSetOf("default-value-served-too-often", "experiment-guardrail-worse"),
+		"minimum_priority": tftypes.NewValue(tftypes.String, "critical"),
+	}
+}
+
+func (protocol integrationProtocol) incidentsConfig(t *testing.T) *tfprotov6.DynamicValue {
+	t.Helper()
+
+	return protocol.slackConfig(t, incidentsSettings(), incidentsSelection())
+}
+
 func (protocol integrationProtocol) validate(t *testing.T, configuration *tfprotov6.DynamicValue) []*tfprotov6.Diagnostic {
 	t.Helper()
 
@@ -251,7 +334,12 @@ func settingOf(t *testing.T, settings tftypes.Value, name string) tftypes.Value 
 func requireSettingError(t *testing.T, diagnostics []*tfprotov6.Diagnostic, setting, sentence string) {
 	t.Helper()
 
-	expectedPath := tftypes.NewAttributePath().WithAttributeName("settings").WithAttributeName(setting)
+	requireAttributeError(t, diagnostics, tftypes.NewAttributePath().WithAttributeName("settings").WithAttributeName(setting), sentence)
+}
+
+func requireAttributeError(t *testing.T, diagnostics []*tfprotov6.Diagnostic, expectedPath *tftypes.AttributePath, sentence string) {
+	t.Helper()
+
 	errorCount := 0
 	for _, diagnostic := range diagnostics {
 		if diagnostic.Severity != tfprotov6.DiagnosticSeverityError {
@@ -259,7 +347,7 @@ func requireSettingError(t *testing.T, diagnostics []*tfprotov6.Diagnostic, sett
 		}
 		errorCount++
 		if diagnostic.Attribute == nil || !diagnostic.Attribute.Equal(expectedPath) {
-			t.Fatalf("expected the error on settings.%s, got it on %v", setting, diagnostic.Attribute)
+			t.Fatalf("expected the error on %s, got it on %v", expectedPath, diagnostic.Attribute)
 		}
 		if diagnostic.Detail != sentence {
 			t.Fatalf("expected the sentence %q, got %q", sentence, diagnostic.Detail)
@@ -268,6 +356,25 @@ func requireSettingError(t *testing.T, diagnostics []*tfprotov6.Diagnostic, sett
 	if errorCount != 1 {
 		t.Fatalf("expected one error, got %d", errorCount)
 	}
+}
+
+func sortedTextsSent(t *testing.T, sent any) []string {
+	t.Helper()
+
+	elements, isList := sent.([]any)
+	if !isList {
+		t.Fatalf("expected a list of texts, got %#v", sent)
+	}
+	texts := make([]string, len(elements))
+	for i, element := range elements {
+		text, isText := element.(string)
+		if !isText {
+			t.Fatalf("expected a list of texts, got %#v", sent)
+		}
+		texts[i] = text
+	}
+	slices.Sort(texts)
+	return texts
 }
 
 func requireSameBody(t *testing.T, sent, expected map[string]any) {
@@ -288,6 +395,404 @@ func TestIntegrationResource_createSendsTheAmplitudeSettingsAndCredentials(t *te
 		"settings": map[string]any{"dataCenter": "us", "apiKey": "amplitude-api-key", "secretKey": "amplitude-secret-key"},
 		"enabled":  true, "projectIds": []any{}, "environmentIds": []any{}, "tagIds": []any{},
 	})
+}
+
+func TestIntegrationResource_createSendsTheSlackWebhookUrlAndWhatTheIntegrationPosts(t *testing.T) {
+	protocol, api := newIntegrationStubProtocol(t)
+
+	protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+
+	requireSameBody(t, api.lastRequestBody(t, http.MethodPost), map[string]any{
+		"name": "#incidents", "kind": "slack",
+		"settings": map[string]any{"webhookUrl": incidentsWebhookURL, "messagePrefix": "@here", "postResolvedAlerts": false},
+		"enabled":  true, "projectIds": []any{}, "environmentIds": []any{}, "tagIds": []any{},
+		"eventTypes": []any{}, "alertKinds": []any{"default-value-served-too-often", "experiment-guardrail-worse"}, "minimumPriority": "critical",
+	})
+}
+
+func TestIntegrationResource_createOfASlackIntegrationLeftAtItsStartingSelectionSendsThatSelection(t *testing.T) {
+	protocol, api := newIntegrationStubProtocol(t)
+
+	protocol.apply(t, protocol.absent(t), protocol.slackConfig(t, nil, nil))
+
+	sent := api.lastRequestBody(t, http.MethodPost)
+	requireSameBody(t, api.lastSettingsSent(t, http.MethodPost), map[string]any{"webhookUrl": incidentsWebhookURL, "postResolvedAlerts": true})
+	if got := sortedTextsSent(t, sent["eventTypes"]); !slices.Equal(got, sortedSlackStartingEventTypes) {
+		t.Fatalf("expected the starting event types %v, got %v", sortedSlackStartingEventTypes, got)
+	}
+	if got := sortedTextsSent(t, sent["alertKinds"]); !slices.Equal(got, sortedSlackStartingAlertKinds) {
+		t.Fatalf("expected the starting alert kinds %v, got %v", sortedSlackStartingAlertKinds, got)
+	}
+	if got := sent["minimumPriority"]; got != "high" {
+		t.Fatalf("expected the starting minimum priority high, got %#v", got)
+	}
+}
+
+func TestIntegrationResource_planOfASlackIntegrationLeftAtItsStartingSelectionShowsThatSelection(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	planned := protocol.plannedValues(t, protocol.absent(t), protocol.slackConfig(t, nil, nil))
+
+	if got := sortedStringsOf(t, planned["event_types"]); !slices.Equal(got, sortedSlackStartingEventTypes) {
+		t.Fatalf("expected the plan to show the starting event types %v, got %v", sortedSlackStartingEventTypes, got)
+	}
+	if got := sortedStringsOf(t, planned["alert_kinds"]); !slices.Equal(got, sortedSlackStartingAlertKinds) {
+		t.Fatalf("expected the plan to show the starting alert kinds %v, got %v", sortedSlackStartingAlertKinds, got)
+	}
+	if got := textOf(t, planned["minimum_priority"]); got != "high" {
+		t.Fatalf("expected the plan to show the starting minimum priority high, got %s", got)
+	}
+	if !booleanOf(t, settingOf(t, planned["settings"], "post_resolved_alerts")) {
+		t.Fatal("expected the plan to show resolved alerts posted")
+	}
+	if got := settingOf(t, planned["settings"], "message_prefix"); !got.IsNull() {
+		t.Fatalf("expected the plan to show no message prefix, got %s", got)
+	}
+}
+
+func TestIntegrationResource_planOfAnAnalyticsIntegrationHasNoSlackAttributes(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	planned := protocol.plannedValues(t, protocol.absent(t), protocol.amplitudeConfig(t, nil))
+
+	if !planned["event_types"].IsNull() {
+		t.Fatalf("expected an Amplitude integration to have no event types, got %s", planned["event_types"])
+	}
+	if !planned["alert_kinds"].IsNull() {
+		t.Fatalf("expected an Amplitude integration to have no alert kinds, got %s", planned["alert_kinds"])
+	}
+	if !planned["minimum_priority"].IsNull() {
+		t.Fatalf("expected an Amplitude integration to have no minimum priority, got %s", planned["minimum_priority"])
+	}
+	if got := settingOf(t, planned["settings"], "post_resolved_alerts"); !got.IsNull() {
+		t.Fatalf("expected an Amplitude integration to have no post_resolved_alerts, got %s", got)
+	}
+}
+
+func TestIntegrationResource_planLeavesTheSelectionOfAKindKnownOnlyAtApplyToTheApply(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	planned := protocol.plannedValues(t, protocol.absent(t), protocol.config(t, map[string]tftypes.Value{
+		"name":     tftypes.NewValue(tftypes.String, "#incidents"),
+		"kind":     tftypes.NewValue(tftypes.String, tftypes.UnknownValue),
+		"settings": protocol.settingsValue(knownSettings(map[string]string{"webhook_url": incidentsWebhookURL})),
+	}))
+
+	if planned["minimum_priority"].IsKnown() {
+		t.Fatalf("expected the minimum priority to stay unknown until the kind is known, got %s", planned["minimum_priority"])
+	}
+	if planned["event_types"].IsKnown() {
+		t.Fatalf("expected the event types to stay unknown until the kind is known, got %s", planned["event_types"])
+	}
+}
+
+func TestIntegrationResource_createRecordsTheSlackIntegrationTheAPISaved(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	created := protocol.values(t, protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t)))
+
+	if got := textOf(t, settingOf(t, created["settings"], "webhook_url")); got != incidentsWebhookURL {
+		t.Fatalf("expected the state to keep the configured webhook URL, got %s", got)
+	}
+	if got := textOf(t, settingOf(t, created["settings"], "message_prefix")); got != "@here" {
+		t.Fatalf("expected the message prefix the API saved, got %s", got)
+	}
+	if booleanOf(t, settingOf(t, created["settings"], "post_resolved_alerts")) {
+		t.Fatal("expected resolved alerts left unposted, as the API saved")
+	}
+	if created["event_types"].IsNull() || len(sortedStringsOf(t, created["event_types"])) != 0 {
+		t.Fatalf("expected the empty event types the API saved, got %s", created["event_types"])
+	}
+	if got := sortedStringsOf(t, created["alert_kinds"]); !slices.Equal(got, []string{"default-value-served-too-often", "experiment-guardrail-worse"}) {
+		t.Fatalf("expected the alert kinds the API saved, got %v", got)
+	}
+	if got := textOf(t, created["minimum_priority"]); got != "critical" {
+		t.Fatalf("expected the minimum priority the API saved, got %s", got)
+	}
+}
+
+func TestIntegrationResource_refreshReadsTheSlackIntegrationAndKeepsTheConfiguredWebhookUrl(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+	created := protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+
+	refreshed := protocol.values(t, protocol.refresh(t, created))
+
+	if got := textOf(t, settingOf(t, refreshed["settings"], "webhook_url")); got != incidentsWebhookURL {
+		t.Fatalf("expected the refresh to keep the webhook URL, got %s", got)
+	}
+	if booleanOf(t, settingOf(t, refreshed["settings"], "post_resolved_alerts")) {
+		t.Fatal("expected the refresh to read resolved alerts left unposted")
+	}
+}
+
+func TestIntegrationResource_updateOfASlackIntegrationSendsWhatItPostsAndLeavesTheWebhookUrlOut(t *testing.T) {
+	protocol, api := newIntegrationStubProtocol(t)
+	created := protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+	settings := incidentsSettings()
+	settings["message_prefix"] = tftypes.NewValue(tftypes.String, "@channel")
+
+	protocol.apply(t, created, protocol.slackConfig(t, settings, incidentsSelection()))
+
+	requireSameBody(t, api.lastRequestBody(t, http.MethodPut), map[string]any{
+		"name": "#incidents", "kind": "slack",
+		"settings": map[string]any{"messagePrefix": "@channel", "postResolvedAlerts": false},
+		"enabled":  true, "projectIds": []any{}, "environmentIds": []any{}, "tagIds": []any{},
+		"eventTypes": []any{}, "alertKinds": []any{"default-value-served-too-often", "experiment-guardrail-worse"}, "minimumPriority": "critical",
+	})
+}
+
+func TestIntegrationResource_updateWithAnotherWebhookUrlSendsIt(t *testing.T) {
+	protocol, api := newIntegrationStubProtocol(t)
+	created := protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+	settings := incidentsSettings()
+	settings["webhook_url"] = tftypes.NewValue(tftypes.String, outagesWebhookURL)
+
+	protocol.apply(t, created, protocol.slackConfig(t, settings, incidentsSelection()))
+
+	if got := api.lastSettingsSent(t, http.MethodPut)["webhookUrl"]; got != outagesWebhookURL {
+		t.Fatalf("expected the update to send the new webhook URL, got %#v", got)
+	}
+}
+
+func TestIntegrationResource_messagePrefixRemovedFromTheConfigurationLeavesMessagesWithoutOne(t *testing.T) {
+	protocol, api := newIntegrationStubProtocol(t)
+	created := protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+	settings := incidentsSettings()
+	delete(settings, "message_prefix")
+
+	updated := protocol.values(t, protocol.apply(t, created, protocol.slackConfig(t, settings, incidentsSelection())))
+
+	if _, sent := api.lastSettingsSent(t, http.MethodPut)["messagePrefix"]; sent {
+		t.Fatal("expected the update to leave the message prefix out, which saves none")
+	}
+	if got := settingOf(t, updated["settings"], "message_prefix"); !got.IsNull() {
+		t.Fatalf("expected the state to have no message prefix, got %s", got)
+	}
+}
+
+func TestIntegrationResource_selectionRemovedFromTheConfigurationReturnsToTheStartingSelection(t *testing.T) {
+	protocol, api := newIntegrationStubProtocol(t)
+	created := protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+
+	protocol.apply(t, created, protocol.slackConfig(t, nil, nil))
+
+	sent := api.lastRequestBody(t, http.MethodPut)
+	if got := sortedTextsSent(t, sent["eventTypes"]); !slices.Equal(got, sortedSlackStartingEventTypes) {
+		t.Fatalf("expected the starting event types %v, got %v", sortedSlackStartingEventTypes, got)
+	}
+	if got := sortedTextsSent(t, sent["alertKinds"]); !slices.Equal(got, sortedSlackStartingAlertKinds) {
+		t.Fatalf("expected the starting alert kinds %v, got %v", sortedSlackStartingAlertKinds, got)
+	}
+	if got := sent["minimumPriority"]; got != "high" {
+		t.Fatalf("expected the starting minimum priority high, got %#v", got)
+	}
+	if got := api.lastSettingsSent(t, http.MethodPut)["postResolvedAlerts"]; got != true {
+		t.Fatalf("expected resolved alerts posted again, got %#v", got)
+	}
+}
+
+func TestIntegrationResource_planOfAMinimumPriorityRemovedFromTheConfigurationLeavesTheUpdateTimeToTheAPI(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+	created := protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+	selection := incidentsSelection()
+	delete(selection, "minimum_priority")
+
+	planned := protocol.plannedValues(t, created, protocol.slackConfig(t, incidentsSettings(), selection))
+
+	if got := textOf(t, planned["minimum_priority"]); got != "high" {
+		t.Fatalf("expected the plan to return the minimum priority to high, got %s", got)
+	}
+	if planned["updated_at"].IsKnown() {
+		t.Fatalf("the update time must stay unknown until the API saves the change, got %s", planned["updated_at"])
+	}
+}
+
+func TestIntegrationResource_planOfPostResolvedAlertsRemovedFromTheConfigurationLeavesTheUpdateTimeToTheAPI(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+	created := protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+	settings := incidentsSettings()
+	delete(settings, "post_resolved_alerts")
+
+	planned := protocol.plannedValues(t, created, protocol.slackConfig(t, settings, incidentsSelection()))
+
+	if !booleanOf(t, settingOf(t, planned["settings"], "post_resolved_alerts")) {
+		t.Fatal("expected the plan to post resolved alerts again")
+	}
+	if planned["updated_at"].IsKnown() {
+		t.Fatalf("the update time must stay unknown until the API saves the change, got %s", planned["updated_at"])
+	}
+}
+
+func TestIntegrationResource_planRestoresTheStartingMinimumPriorityChangedOutsideTerraform(t *testing.T) {
+	protocol, api := newIntegrationStubProtocol(t)
+	configuration := protocol.slackConfig(t, nil, nil)
+	created := protocol.apply(t, protocol.absent(t), configuration)
+	api.changeOutsideTerraform(func(saved map[string]any) {
+		saved["minimumPriority"] = "low"
+	})
+	refreshed := protocol.refresh(t, created)
+
+	planned := protocol.plannedValues(t, refreshed, configuration)
+
+	if got := textOf(t, protocol.values(t, refreshed)["minimum_priority"]); got != "low" {
+		t.Fatalf("expected the refresh to show the minimum priority saved outside Terraform, got %s", got)
+	}
+	if got := textOf(t, planned["minimum_priority"]); got != "high" {
+		t.Fatalf("expected the plan to restore the starting minimum priority, got %s", got)
+	}
+}
+
+func TestIntegrationResource_planAfterARefreshOfASlackIntegrationLeftAtItsStartingSelectionChangesNothing(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+	configuration := protocol.slackConfig(t, nil, nil)
+	created := protocol.apply(t, protocol.absent(t), configuration)
+	refreshed := protocol.refresh(t, created)
+
+	protocol.requireNoPlannedChange(t, refreshed, configuration)
+}
+
+func TestIntegrationResource_planAfterARefreshOfASlackIntegrationWithEveryAttributeDeclaredChangesNothing(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+	configuration := protocol.incidentsConfig(t)
+	created := protocol.apply(t, protocol.absent(t), configuration)
+	refreshed := protocol.refresh(t, created)
+
+	protocol.requireNoPlannedChange(t, refreshed, configuration)
+}
+
+func TestIntegrationResource_keepsTheDeclaredMessagePrefixTheAPITrimmed(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+	configuration := protocol.slackConfig(t, map[string]tftypes.Value{"message_prefix": tftypes.NewValue(tftypes.String, " @here ")}, nil)
+	created := protocol.apply(t, protocol.absent(t), configuration)
+
+	refreshed := protocol.refresh(t, created)
+
+	if got := textOf(t, settingOf(t, protocol.values(t, created)["settings"], "message_prefix")); got != " @here " {
+		t.Fatalf("expected the create to keep the declared message prefix, got %q", got)
+	}
+	protocol.requireNoPlannedChange(t, refreshed, configuration)
+}
+
+func TestIntegrationResource_importOfASlackIntegrationReadsEverythingButTheWebhookUrl(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+	protocol.apply(t, protocol.absent(t), protocol.incidentsConfig(t))
+
+	imported := protocol.values(t, protocol.importByID(t, integrationStubID))
+
+	if got := textOf(t, imported["kind"]); got != "slack" {
+		t.Fatalf("expected the saved kind, got %q", got)
+	}
+	if got := textOf(t, settingOf(t, imported["settings"], "message_prefix")); got != "@here" {
+		t.Fatalf("expected the saved message prefix, got %q", got)
+	}
+	if booleanOf(t, settingOf(t, imported["settings"], "post_resolved_alerts")) {
+		t.Fatal("expected resolved alerts left unposted, as saved")
+	}
+	if got := sortedStringsOf(t, imported["alert_kinds"]); !slices.Equal(got, []string{"default-value-served-too-often", "experiment-guardrail-worse"}) {
+		t.Fatalf("expected the saved alert kinds, got %v", got)
+	}
+	if got := textOf(t, imported["minimum_priority"]); got != "critical" {
+		t.Fatalf("expected the saved minimum priority, got %q", got)
+	}
+	if got := settingOf(t, imported["settings"], "webhook_url"); !got.IsNull() {
+		t.Fatalf("expected the import to hold no webhook URL, got %s", got)
+	}
+}
+
+func TestIntegrationResource_acceptsASlackIntegrationWithOnlyItsWebhookUrl(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.slackConfig(t, nil, nil))
+
+	requireNoErrorDiagnostics(t, diagnostics)
+}
+
+func TestIntegrationResource_acceptsASlackIntegrationWithEveryAttributeDeclared(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.incidentsConfig(t))
+
+	requireNoErrorDiagnostics(t, diagnostics)
+}
+
+func TestIntegrationResource_refusesASlackIntegrationWithoutAWebhookUrl(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.slackConfig(t, map[string]tftypes.Value{"webhook_url": tftypes.NewValue(tftypes.String, nil)}, nil))
+
+	requireSettingError(t, diagnostics, "webhook_url", "The Slack webhook URL must have the form https://hooks.slack.com/services/…")
+}
+
+func TestIntegrationResource_refusesAnAnalyticsSettingOnASlackIntegration(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.slackConfig(t, map[string]tftypes.Value{"api_key": tftypes.NewValue(tftypes.String, "amplitude-api-key")}, nil))
+
+	requireSettingError(t, diagnostics, "api_key", "api_key does not apply to the slack kind. Remove it from settings.")
+}
+
+func TestIntegrationResource_refusesAnEndpointUrlOnASlackIntegration(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.slackConfig(t, map[string]tftypes.Value{"endpoint_url": tftypes.NewValue(tftypes.String, "https://annotations.example.com/slack")}, nil))
+
+	requireSettingError(t, diagnostics, "endpoint_url", "endpoint_url does not apply to the slack kind. Remove it from settings.")
+}
+
+func TestIntegrationResource_refusesAMessagePrefixOnAnAnalyticsIntegration(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.kindConfig(t, "amplitude", withSetting(amplitudeSettings, "message_prefix", "@here"), nil))
+
+	requireSettingError(t, diagnostics, "message_prefix", "message_prefix does not apply to the amplitude kind. Remove it from settings.")
+}
+
+func TestIntegrationResource_refusesPostResolvedAlertsOnAnAnalyticsIntegration(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+	settings := knownSettings(amplitudeSettings)
+	settings["post_resolved_alerts"] = tftypes.NewValue(tftypes.Bool, true)
+
+	diagnostics := protocol.validate(t, protocol.config(t, map[string]tftypes.Value{
+		"name":     tftypes.NewValue(tftypes.String, "Product analytics"),
+		"kind":     tftypes.NewValue(tftypes.String, "amplitude"),
+		"settings": protocol.settingsValue(settings),
+	}))
+
+	requireSettingError(t, diagnostics, "post_resolved_alerts", "post_resolved_alerts does not apply to the amplitude kind. Remove it from settings.")
+}
+
+func TestIntegrationResource_refusesEventTypesOnAnAnalyticsIntegration(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.amplitudeConfig(t, map[string]tftypes.Value{"event_types": stringSetOf("config.updated")}))
+
+	requireAttributeError(t, diagnostics, tftypes.NewAttributePath().WithAttributeName("event_types"), "event_types does not apply to the amplitude kind. Remove it.")
+}
+
+func TestIntegrationResource_refusesAlertKindsOnAnAnalyticsIntegration(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.amplitudeConfig(t, map[string]tftypes.Value{"alert_kinds": stringSetOf()}))
+
+	requireAttributeError(t, diagnostics, tftypes.NewAttributePath().WithAttributeName("alert_kinds"), "alert_kinds does not apply to the amplitude kind. Remove it.")
+}
+
+func TestIntegrationResource_refusesAMinimumPriorityOnAnAnalyticsIntegration(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.amplitudeConfig(t, map[string]tftypes.Value{"minimum_priority": tftypes.NewValue(tftypes.String, "high")}))
+
+	requireAttributeError(t, diagnostics, tftypes.NewAttributePath().WithAttributeName("minimum_priority"), "minimum_priority does not apply to the amplitude kind. Remove it.")
+}
+
+func TestIntegrationResource_refusesAMinimumPriorityThatIsNotAPriority(t *testing.T) {
+	protocol, _ := newIntegrationStubProtocol(t)
+
+	diagnostics := protocol.validate(t, protocol.slackConfig(t, nil, map[string]tftypes.Value{"minimum_priority": tftypes.NewValue(tftypes.String, "urgent")}))
+
+	if got := firstErrorAttribute(t, diagnostics); got != fmt.Sprint(tftypes.AttributeName("minimum_priority")) {
+		t.Fatalf("expected the error on minimum_priority, got it on %s", got)
+	}
 }
 
 func TestIntegrationResource_createRecordsTheIntegrationTheAPISaved(t *testing.T) {
@@ -324,7 +829,7 @@ func TestIntegrationResource_marksEverySecretSettingSensitive(t *testing.T) {
 		}
 	}
 	slices.Sort(sensitiveSettings)
-	expected := []string{"api_key", "personal_api_key", "secret_key", "service_account_secret", "service_account_token", "service_account_username"}
+	expected := []string{"api_key", "personal_api_key", "secret_key", "service_account_secret", "service_account_token", "service_account_username", "webhook_url"}
 	if !slices.Equal(sensitiveSettings, expected) {
 		t.Fatalf("expected the sensitive settings %v, got %v", expected, sensitiveSettings)
 	}
@@ -667,7 +1172,7 @@ func TestIntegrationResource_acceptsCompletePostHogSettings(t *testing.T) {
 	requireNoErrorDiagnostics(t, diagnostics)
 }
 
-func TestIntegrationResource_acceptsAnEndpointUrlOnAnyKind(t *testing.T) {
+func TestIntegrationResource_acceptsAnEndpointUrlOnAnAnalyticsKind(t *testing.T) {
 	protocol, _ := newIntegrationStubProtocol(t)
 	settings := withSetting(datadogSettings, "endpoint_url", "https://annotations.example.com/datadog")
 
@@ -854,12 +1359,15 @@ type integrationAcceptance struct {
 }
 
 type integrationSavedByTheAPI struct {
-	Name               string             `json:"name"`
-	Kind               string             `json:"kind"`
-	URL                string             `json:"url"`
-	Settings           map[string]*string `json:"settings"`
-	Enabled            bool               `json:"enabled"`
-	CredentialsSavedAt string             `json:"credentialsSavedAt"`
+	Name               string         `json:"name"`
+	Kind               string         `json:"kind"`
+	URL                string         `json:"url"`
+	Settings           map[string]any `json:"settings"`
+	Enabled            bool           `json:"enabled"`
+	EventTypes         []string       `json:"eventTypes"`
+	AlertKinds         []string       `json:"alertKinds"`
+	MinimumPriority    string         `json:"minimumPriority"`
+	CredentialsSavedAt string         `json:"credentialsSavedAt"`
 }
 
 func newIntegrationAcceptance(t *testing.T) integrationAcceptance {
@@ -883,6 +1391,17 @@ func (acceptance integrationAcceptance) namedAmplitudeConfig(t *testing.T, setti
 	return acceptance.kindConfig(t, "amplitude", settings, map[string]tftypes.Value{
 		"name": tftypes.NewValue(tftypes.String, acceptance.name),
 	})
+}
+
+func (acceptance integrationAcceptance) namedSlackConfig(t *testing.T, settings, selection map[string]tftypes.Value) *tfprotov6.DynamicValue {
+	t.Helper()
+
+	attributes := map[string]tftypes.Value{
+		"name":    tftypes.NewValue(tftypes.String, acceptance.name),
+		"enabled": tftypes.NewValue(tftypes.Bool, false),
+	}
+	maps.Copy(attributes, selection)
+	return acceptance.slackConfig(t, settings, attributes)
 }
 
 func (acceptance integrationAcceptance) create(t *testing.T, configuration *tfprotov6.DynamicValue) *tfprotov6.DynamicValue {
@@ -932,12 +1451,12 @@ func (acceptance integrationAcceptance) saved(t *testing.T, state *tfprotov6.Dyn
 	return saved
 }
 
-func requireSavedSetting(t *testing.T, saved integrationSavedByTheAPI, field, expected string) {
+func requireSavedSetting(t *testing.T, saved integrationSavedByTheAPI, field string, expected any) {
 	t.Helper()
 
 	value, present := saved.Settings[field]
-	if !present || value == nil || *value != expected {
-		t.Fatalf("expected the API to have %s %q, it has %+v", field, expected, saved.Settings)
+	if !present || value != expected {
+		t.Fatalf("expected the API to have %s %#v, it has %+v", field, expected, saved.Settings)
 	}
 }
 
@@ -1032,6 +1551,317 @@ func TestAccIntegrationResource_destroysTheIntegration(t *testing.T) {
 	if got := acceptance.requestSaved(t, created).StatusCode; got != http.StatusNotFound {
 		t.Fatalf("expected the API to no longer have the integration, got HTTP %d", got)
 	}
+}
+
+func TestAccIntegrationResource_createsASlackIntegrationThatNeverShowsItsWebhookUrl(t *testing.T) {
+	acceptance := newIntegrationAcceptance(t)
+
+	created := acceptance.create(t, acceptance.namedSlackConfig(t, incidentsSettings(), incidentsSelection()))
+
+	saved := acceptance.saved(t, created)
+	if saved.Name != acceptance.name || saved.Kind != "slack" || saved.Enabled {
+		t.Fatalf("expected a disabled Slack integration with the declared name, the API has %+v", saved)
+	}
+	if saved.URL != "https://hooks.slack.com/services/" {
+		t.Fatalf("expected the API to show only the start every Slack webhook URL shares, it has %s", saved.URL)
+	}
+	requireSavedSetting(t, saved, "messagePrefix", "@here")
+	requireSavedSetting(t, saved, "postResolvedAlerts", false)
+	if len(saved.Settings) != 2 {
+		t.Fatalf("expected the API to return only the message prefix and the resolved alerts switch, it has %+v", saved.Settings)
+	}
+	if len(saved.EventTypes) != 0 {
+		t.Fatalf("expected no event types, the API has %v", saved.EventTypes)
+	}
+	if got := slices.Sorted(slices.Values(saved.AlertKinds)); !slices.Equal(got, []string{"default-value-served-too-often", "experiment-guardrail-worse"}) {
+		t.Fatalf("expected the declared alert kinds, the API has %v", got)
+	}
+	if saved.MinimumPriority != "critical" {
+		t.Fatalf("expected the minimum priority critical, the API has %s", saved.MinimumPriority)
+	}
+}
+
+func TestAccIntegrationResource_slackPrefixAndMinimumPriorityChangeKeepsTheWebhookUrlAndTheAlertKinds(t *testing.T) {
+	acceptance := newIntegrationAcceptance(t)
+	created := acceptance.create(t, acceptance.namedSlackConfig(t, incidentsSettings(), incidentsSelection()))
+	savedBefore := acceptance.saved(t, created)
+	settings := incidentsSettings()
+	settings["message_prefix"] = tftypes.NewValue(tftypes.String, "@channel")
+	selection := incidentsSelection()
+	selection["minimum_priority"] = tftypes.NewValue(tftypes.String, "high")
+
+	updated := acceptance.apply(t, created, acceptance.namedSlackConfig(t, settings, selection))
+
+	saved := acceptance.saved(t, updated)
+	requireSavedSetting(t, saved, "messagePrefix", "@channel")
+	if saved.MinimumPriority != "high" {
+		t.Fatalf("expected the minimum priority high, the API has %s", saved.MinimumPriority)
+	}
+	if got := slices.Sorted(slices.Values(saved.AlertKinds)); !slices.Equal(got, []string{"default-value-served-too-often", "experiment-guardrail-worse"}) {
+		t.Fatalf("expected the alert kinds to stay as declared, the API has %v", got)
+	}
+	if saved.CredentialsSavedAt != savedBefore.CredentialsSavedAt {
+		t.Fatalf("expected the webhook URL to stay as saved at %s, the API has %s", savedBefore.CredentialsSavedAt, saved.CredentialsSavedAt)
+	}
+}
+
+func TestAccIntegrationResource_anotherWebhookUrlReplacesTheSavedOne(t *testing.T) {
+	acceptance := newIntegrationAcceptance(t)
+	created := acceptance.create(t, acceptance.namedSlackConfig(t, incidentsSettings(), incidentsSelection()))
+	savedBefore := acceptance.saved(t, created)
+	settings := incidentsSettings()
+	settings["webhook_url"] = tftypes.NewValue(tftypes.String, outagesWebhookURL)
+
+	updated := acceptance.apply(t, created, acceptance.namedSlackConfig(t, settings, incidentsSelection()))
+
+	saved := acceptance.saved(t, updated)
+	if saved.CredentialsSavedAt == savedBefore.CredentialsSavedAt {
+		t.Fatalf("expected the webhook URL to be saved again, the API still has %s", saved.CredentialsSavedAt)
+	}
+	requireSavedSetting(t, saved, "messagePrefix", "@here")
+}
+
+func TestAccIntegrationResource_slackImportReadsEverythingButTheWebhookUrl(t *testing.T) {
+	acceptance := newIntegrationAcceptance(t)
+	created := acceptance.create(t, acceptance.namedSlackConfig(t, incidentsSettings(), incidentsSelection()))
+
+	imported := acceptance.values(t, acceptance.importByID(t, textOf(t, acceptance.values(t, created)["id"])))
+
+	if got := textOf(t, imported["kind"]); got != "slack" {
+		t.Fatalf("expected the imported kind, got %q", got)
+	}
+	if got := textOf(t, settingOf(t, imported["settings"], "message_prefix")); got != "@here" {
+		t.Fatalf("expected the imported message prefix, got %q", got)
+	}
+	if got := textOf(t, imported["minimum_priority"]); got != "critical" {
+		t.Fatalf("expected the imported minimum priority, got %q", got)
+	}
+	if got := settingOf(t, imported["settings"], "webhook_url"); !got.IsNull() {
+		t.Fatalf("expected the import to hold no webhook URL, got %s", got)
+	}
+}
+
+func TestAccIntegrationResource_destroysASlackIntegration(t *testing.T) {
+	acceptance := newIntegrationAcceptance(t)
+	created := acceptance.create(t, acceptance.namedSlackConfig(t, nil, nil))
+
+	requireNoErrorDiagnostics(t, acceptance.destroy(t, created))
+
+	if got := acceptance.requestSaved(t, created).StatusCode; got != http.StatusNotFound {
+		t.Fatalf("expected the API to no longer have the integration, got HTTP %d", got)
+	}
+}
+
+func testAccSlackIntegrationConfig(name, webhookURL string) string {
+	return fmt.Sprintf(`
+resource "configdirector_integration" "test" {
+  name    = %q
+  kind    = "slack"
+  enabled = false
+  settings = {
+    webhook_url = %q
+  }
+}
+`, name, webhookURL)
+}
+
+func testAccIncidentsIntegrationConfig(name, webhookURL, messagePrefix, minimumPriority string) string {
+	return fmt.Sprintf(`
+resource "configdirector_integration" "test" {
+  name    = %q
+  kind    = "slack"
+  enabled = false
+  settings = {
+    webhook_url          = %q
+    message_prefix       = %q
+    post_resolved_alerts = false
+  }
+  event_types      = []
+  alert_kinds      = ["default-value-served-too-often", "experiment-guardrail-worse"]
+  minimum_priority = %q
+}
+`, name, webhookURL, messagePrefix, minimumPriority)
+}
+
+const testAccIncidentsIntegrationConfigFromASensitiveVariable = `
+variable "webhook_url" {
+  type      = string
+  sensitive = true
+}
+
+variable "name" {
+  type = string
+}
+
+resource "configdirector_integration" "test" {
+  name    = var.name
+  kind    = "slack"
+  enabled = false
+  settings = {
+    webhook_url    = var.webhook_url
+    message_prefix = "@here"
+  }
+  event_types      = []
+  minimum_priority = "critical"
+}
+`
+
+type expectTheWebhookUrlHidden struct{}
+
+func (check expectTheWebhookUrlHidden) CheckPlan(ctx context.Context, req plancheck.CheckPlanRequest, resp *plancheck.CheckPlanResponse) {
+	for _, change := range req.Plan.ResourceChanges {
+		if change.Address != "configdirector_integration.test" {
+			continue
+		}
+		afterSensitive, _ := change.Change.AfterSensitive.(map[string]any)
+		settings, _ := afterSensitive["settings"].(map[string]any)
+		if settings["webhook_url"] != true {
+			resp.Error = fmt.Errorf("expected the plan to hide settings.webhook_url, its hidden values are %v", change.Change.AfterSensitive)
+		}
+		return
+	}
+	resp.Error = errors.New("expected a plan for configdirector_integration.test")
+}
+
+func TestAccIntegrationResource_terraformAppliesEverySlackStepWithoutDrift(t *testing.T) {
+	name := testAccIntegrationNamePrefix + strings.TrimPrefix(newTestAccProject(t).Slug, testAccProjectSlugPrefix)
+	startingSelection := []statecheck.StateCheck{
+		statecheck.ExpectKnownValue("configdirector_integration.test", tfjsonpath.New("event_types"), knownvalue.SetExact([]knownvalue.Check{
+			knownvalue.StringExact("config.created"), knownvalue.StringExact("config.updated"), knownvalue.StringExact("config.archived"),
+			knownvalue.StringExact("config.restored"), knownvalue.StringExact("targeting_rules.updated"),
+		})),
+		statecheck.ExpectKnownValue("configdirector_integration.test", tfjsonpath.New("alert_kinds"), knownvalue.SetExact([]knownvalue.Check{
+			knownvalue.StringExact("config-not-found"), knownvalue.StringExact("client-requested-server-only-config"),
+			knownvalue.StringExact("server-requested-client-only-config"), knownvalue.StringExact("config-type-mismatch"),
+			knownvalue.StringExact("default-value-mismatch"), knownvalue.StringExact("default-value-served-too-often"),
+		})),
+		statecheck.ExpectKnownValue("configdirector_integration.test", tfjsonpath.New("minimum_priority"), knownvalue.StringExact("high")),
+		statecheck.ExpectKnownValue("configdirector_integration.test", tfjsonpath.New("settings").AtMapKey("post_resolved_alerts"), knownvalue.Bool(true)),
+		statecheck.ExpectKnownValue("configdirector_integration.test", tfjsonpath.New("settings").AtMapKey("message_prefix"), knownvalue.Null()),
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:            testAccSlackIntegrationConfig(name, incidentsWebhookURL),
+				ConfigStateChecks: startingSelection,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply:             []plancheck.PlanCheck{expectTheWebhookUrlHidden{}},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+			{
+				Config: testAccIncidentsIntegrationConfig(name, incidentsWebhookURL, "@here", "critical"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply:             []plancheck.PlanCheck{plancheck.ExpectResourceAction("configdirector_integration.test", plancheck.ResourceActionUpdate), expectTheWebhookUrlHidden{}},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+			{
+				Config: testAccIncidentsIntegrationConfig(name, incidentsWebhookURL, "@channel", "high"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply:             []plancheck.PlanCheck{plancheck.ExpectResourceAction("configdirector_integration.test", plancheck.ResourceActionUpdate)},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("configdirector_integration.test", tfjsonpath.New("settings").AtMapKey("message_prefix"), knownvalue.StringExact("@channel")),
+					statecheck.ExpectKnownValue("configdirector_integration.test", tfjsonpath.New("minimum_priority"), knownvalue.StringExact("high")),
+				},
+			},
+			{
+				Config: testAccIncidentsIntegrationConfig(name, outagesWebhookURL, "@channel", "high"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply:             []plancheck.PlanCheck{plancheck.ExpectResourceAction("configdirector_integration.test", plancheck.ResourceActionUpdate), expectTheWebhookUrlHidden{}},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+			{
+				Config:            testAccSlackIntegrationConfig(name, outagesWebhookURL),
+				ConfigStateChecks: startingSelection,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply:             []plancheck.PlanCheck{plancheck.ExpectResourceAction("configdirector_integration.test", plancheck.ResourceActionUpdate)},
+					PostApplyPostRefresh: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+			{
+				ResourceName:            "configdirector_integration.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"settings.webhook_url"},
+			},
+		},
+	})
+}
+
+func TestAccIntegrationResource_slackWebhookUrlNeverReachesTheLogs(t *testing.T) {
+	name := testAccIntegrationNamePrefix + strings.TrimPrefix(newTestAccProject(t).Slug, testAccProjectSlugPrefix)
+	logPath := filepath.Join(t.TempDir(), "terraform.log")
+	t.Setenv("TF_LOG", "TRACE")
+	t.Setenv("TF_ACC_LOG", "TRACE")
+	t.Setenv("TF_ACC_LOG_PATH", logPath)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:          testAccIncidentsIntegrationConfigFromASensitiveVariable,
+				ConfigVariables: config.Variables{"name": config.StringVariable(name), "webhook_url": config.StringVariable(incidentsWebhookURL)},
+			},
+			{
+				Config:          testAccIncidentsIntegrationConfigFromASensitiveVariable,
+				ConfigVariables: config.Variables{"name": config.StringVariable(name), "webhook_url": config.StringVariable(outagesWebhookURL)},
+			},
+			{
+				Config:                  testAccIncidentsIntegrationConfigFromASensitiveVariable,
+				ConfigVariables:         config.Variables{"name": config.StringVariable(name), "webhook_url": config.StringVariable(outagesWebhookURL)},
+				ResourceName:            "configdirector_integration.test",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"settings.webhook_url"},
+			},
+		},
+	})
+
+	logs, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(logs, []byte("configdirector_integration")) {
+		t.Fatal("expected the log to record the integration's applies")
+	}
+	for _, line := range bytes.Split(logs, []byte("\n")) {
+		if bytes.Contains(line, []byte("incidentsWebhookSecret")) || bytes.Contains(line, []byte("outagesWebhookSecret")) {
+			t.Fatalf("expected the log to never hold the webhook URL, this line holds it:\n%s", line)
+		}
+	}
+}
+
+func TestAccIntegrationResource_analyticsIntegrationAppliedWith0100PlansNoChange(t *testing.T) {
+	name := testAccIntegrationNamePrefix + strings.TrimPrefix(newTestAccProject(t).Slug, testAccProjectSlugPrefix)
+	t.Setenv(resource.EnvTfAccProviderNamespace, "configdirector")
+	configurationWrittenFor0100 := testAccAmplitudeIntegrationConfig(name, "us", "amplitude-secret-key")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"configdirector": {Source: "ConfigDirector/configdirector", VersionConstraint: "0.10.0"},
+				},
+				Config: configurationWrittenFor0100,
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Config:                   configurationWrittenFor0100,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectEmptyPlan()},
+				},
+			},
+		},
+	})
 }
 
 func testAccAmplitudeIntegrationConfig(name, dataCenter, secretKey string) string {

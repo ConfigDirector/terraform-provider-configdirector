@@ -32,9 +32,17 @@ description: |-
 
 {{tffile "examples/resources/configdirector_integration/posthog.tf"}}
 
-## Keys, tokens and secrets
+### Slack
 
-ConfigDirector stores each key, token and secret encrypted and never shows it again. Terraform keeps the value from your configuration in the state, marked sensitive so that no plan shows it. Changing one in the configuration saves all of the integration's credentials on the next apply, and changing any other setting leaves them as they are. Replacing one in the dashboard goes unnoticed by Terraform.
+Acme's `#incidents` channel gets the alerts that reach Critical, opened with `@here` so everyone in the channel is notified, and no changes.
+
+{{tffile "examples/resources/configdirector_integration/slack.tf"}}
+
+Left out, `event_types`, `alert_kinds`, `minimum_priority` and `settings.post_resolved_alerts` take what a new Slack integration starts with: config and targeting rule changes, the application request alerts at High and above, and one line when an alert resolves. Removing one from the configuration returns it to that. Left out, `settings.message_prefix` gives messages without one.
+
+## Keys, tokens, secrets and Slack webhook URLs
+
+ConfigDirector stores each key, token, secret and Slack webhook URL encrypted and never shows it again. Terraform keeps the value from your configuration in the state, marked sensitive so that no plan shows it. Changing one in the configuration saves all of the integration's credentials on the next apply, and changing any other setting leaves them as they are. Replacing one in the dashboard goes unnoticed by Terraform.
 
 Importing an integration reads everything except these values, so the first plan after an import shows them changing and the first apply saves the ones in your configuration.
 

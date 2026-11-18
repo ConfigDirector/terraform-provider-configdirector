@@ -309,6 +309,39 @@ needs `integrations:manage`, which only owners and admins can grant. See the
 [integration resource reference](docs/resources/integration.md) and
 [what each tool needs](https://docs.configdirector.com/integrations/analytics).
 
+## Posting changes and alerts to Slack with Terraform or OpenTofu
+
+Use `configdirector_integration` with `kind = "slack"` to post changes and alerts to one Slack channel. Set
+`settings.webhook_url` to the incoming webhook URL Slack created for the channel, from a sensitive variable:
+
+```hcl
+resource "configdirector_integration" "incidents" {
+  name = "#incidents"
+  kind = "slack"
+  settings = {
+    webhook_url    = var.slack_incidents_webhook_url
+    message_prefix = "@here"
+  }
+  event_types = []
+  alert_kinds = [
+    "default-value-served-too-often",
+    "experiment-guardrail-worse",
+    "integration-disabled",
+    "webhook-disabled",
+  ]
+  minimum_priority = "critical"
+}
+```
+
+Left out, `event_types`, `alert_kinds`, `minimum_priority` and `settings.post_resolved_alerts` take what a new Slack
+integration starts with: config and targeting rule changes, the application request alerts at High and above, and one
+line when an alert resolves. Removing one from your configuration returns it to that, and leaving out `message_prefix`
+posts messages without one. These attributes fail the plan on an analytics kind, as an analytics setting does on Slack.
+ConfigDirector never returns the webhook URL, so Terraform keeps the one from your configuration, marked sensitive:
+changing it saves the new URL on the next apply, and replacing it in the dashboard goes unnoticed. An import reads
+everything except the URL, so the first apply after it saves the one in your configuration. An organization can have
+up to 20 Slack integrations.
+
 ## Developing the provider
 
 ```sh
@@ -341,8 +374,8 @@ TF_ACC=1 go test ./internal/provider -run '^TestAccWebhookResource_' -count=1 -v
 ```
 
 Integration tests use the same public provider protocol. Their local tests run against an HTTP stub of the Admin API.
-The API tests create Amplitude integrations named `tf-acc-...` with made-up credentials and need a token with
-`integrations:manage`:
+The API tests create Amplitude and Slack integrations named `tf-acc-...` with made-up credentials and webhook URLs, and
+need a token with `integrations:manage`. The Slack integrations are disabled, so nothing is posted to Slack:
 
 ```sh
 TF_ACC=1 go test ./internal/provider -run '^TestAccIntegrationResource_' -count=1 -v
