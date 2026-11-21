@@ -34,8 +34,9 @@ provider "configdirector" {
 }
 ```
 
-You can generate an admin API token via the ConfigDirector dashboard, then export the CONFIGDIRECTOR_TOKEN environment variable with
-the API token.
+Generate an organization API token on the **API tokens** page of the ConfigDirector dashboard, then export the
+CONFIGDIRECTOR_TOKEN environment variable with the API token. An organization API token keeps your applies working when
+the member who generated it changes role or leaves, and the audit log shows the changes as made by the token.
 
 A project with one feature flag looks like this:
 

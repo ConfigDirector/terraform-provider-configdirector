@@ -20,6 +20,6 @@ description: |-
 
 ## API token
 
-The provider authenticates with a ConfigDirector [API token](https://docs.configdirector.com/integrations/admin-api#authentication). A token with selected projects cannot create projects or manage webhooks or integrations, so a configuration that does any of those needs a token with all projects.
+The provider authenticates with a ConfigDirector [API token](https://docs.configdirector.com/integrations/admin-api#authentication). Use an organization API token, so your applies keep working when the member who generated it changes role or leaves. The audit log then shows the changes as made by the token. A token with selected projects cannot create projects or manage webhooks or integrations, so a configuration that does any of those needs a token with all projects.
 
 {{ .SchemaMarkdown | trimspace }}
