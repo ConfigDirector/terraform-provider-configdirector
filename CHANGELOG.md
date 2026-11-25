@@ -4,6 +4,8 @@ All notable changes to the ConfigDirector Terraform provider are documented here
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-24
+
 ### Changed
 
 - When ConfigDirector answers that a request rate limit was reached, the provider waits the seconds the answer names and sends the request again, so a large plan or apply pauses instead of stopping partway. ConfigDirector accepts up to 1,200 Admin API requests per minute from one organization and 3,000 from one client address. A refused request changes nothing, so creates are sent again too. One request waits at most three times; if ConfigDirector still refuses it, the run fails with "ConfigDirector kept refusing the request after three waits." followed by ConfigDirector's message. Before, the first refusal failed the run with `configdirector API returned status 429`.
