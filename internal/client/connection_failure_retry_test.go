@@ -49,9 +49,10 @@ func answer(status int, body string) stubReply {
 }
 
 type stubAPI struct {
-	server       *httptest.Server
-	mutex        sync.Mutex
-	requestLines []string
+	server        *httptest.Server
+	mutex         sync.Mutex
+	requestLines  []string
+	requestBodies []string
 }
 
 func newStubAPI(t *testing.T, replies ...stubReply) *stubAPI {
@@ -59,9 +60,10 @@ func newStubAPI(t *testing.T, replies ...stubReply) *stubAPI {
 
 	stub := &stubAPI{}
 	stub.server = httptest.NewUnstartedServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		_, _ = io.ReadAll(request.Body)
+		body, _ := io.ReadAll(request.Body)
 		stub.mutex.Lock()
 		stub.requestLines = append(stub.requestLines, request.Method+" "+request.URL.Path)
+		stub.requestBodies = append(stub.requestBodies, string(body))
 		attempt := len(stub.requestLines)
 		stub.mutex.Unlock()
 		replies[min(attempt, len(replies))-1](t, response)
@@ -75,6 +77,13 @@ func (stub *stubAPI) receivedRequestLines() []string {
 	defer stub.mutex.Unlock()
 
 	return slices.Clone(stub.requestLines)
+}
+
+func (stub *stubAPI) receivedRequestBodies() []string {
+	stub.mutex.Lock()
+	defer stub.mutex.Unlock()
+
+	return slices.Clone(stub.requestBodies)
 }
 
 func startStubAPI(t *testing.T, replies ...stubReply) (*stubAPI, *Client) {

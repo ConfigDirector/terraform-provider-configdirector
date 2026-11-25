@@ -13,16 +13,27 @@ import (
 )
 
 type Client struct {
-	BaseURL    string
-	Token      string
-	HTTPClient *http.Client
+	BaseURL                string
+	Token                  string
+	HTTPClient             *http.Client
+	waitBeforeSendingAgain func(ctx context.Context, wait time.Duration) error
 }
 
 func New(baseURL, token string) *Client {
 	return &Client{
-		BaseURL:    strings.TrimRight(baseURL, "/"),
-		Token:      token,
-		HTTPClient: http.DefaultClient,
+		BaseURL:                strings.TrimRight(baseURL, "/"),
+		Token:                  token,
+		HTTPClient:             http.DefaultClient,
+		waitBeforeSendingAgain: waitUnlessCanceled,
+	}
+}
+
+func waitUnlessCanceled(ctx context.Context, wait time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(wait):
+		return nil
 	}
 }
 
@@ -46,23 +57,52 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		encodedBody = b
 	}
 
+	for waitsMade := 0; ; waitsMade++ {
+		answer, err := c.receiveAnswer(ctx, method, path, encodedBody)
+		if err != nil {
+			return err
+		}
+
+		switch verdict := requestRateLimitVerdictOn(answer, waitsMade).(type) {
+		case notRefusedByARequestRateLimit:
+			return answer.decodeInto(out)
+		case stopAtTheRequestRateLimit:
+			return verdict.err
+		case sendAgainAfter:
+			if err := c.waitBeforeSendingAgain(ctx, verdict.wait); err != nil {
+				return fmt.Errorf("waiting to send the request again: %w", err)
+			}
+		}
+	}
+}
+
+type apiAnswer struct {
+	statusCode int
+	header     http.Header
+	body       []byte
+}
+
+func (c *Client) receiveAnswer(ctx context.Context, method, path string, encodedBody []byte) (apiAnswer, error) {
 	resp, err := c.send(ctx, method, path, encodedBody)
 	if err != nil {
-		return err
+		return apiAnswer{}, err
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("reading response body: %w", err)
+		return apiAnswer{}, fmt.Errorf("reading response body: %w", err)
+	}
+	return apiAnswer{statusCode: resp.StatusCode, header: resp.Header, body: body}, nil
+}
+
+func (answer apiAnswer) decodeInto(out any) error {
+	if answer.statusCode < 200 || answer.statusCode >= 300 {
+		return &APIError{StatusCode: answer.statusCode, Body: string(answer.body)}
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return &APIError{StatusCode: resp.StatusCode, Body: string(respBody)}
-	}
-
-	if out != nil && len(respBody) > 0 {
-		if err := json.Unmarshal(respBody, out); err != nil {
+	if out != nil && len(answer.body) > 0 {
+		if err := json.Unmarshal(answer.body, out); err != nil {
 			return fmt.Errorf("decoding response body: %w", err)
 		}
 	}
@@ -85,10 +125,8 @@ func (c *Client) send(ctx context.Context, method, path string, encodedBody []by
 		if !retry {
 			return nil, fmt.Errorf("performing request: %w", err)
 		}
-		select {
-		case <-ctx.Done():
+		if c.waitBeforeSendingAgain(ctx, wait) != nil {
 			return nil, fmt.Errorf("performing request: %w", err)
-		case <-time.After(wait):
 		}
 	}
 }
